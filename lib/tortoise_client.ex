@@ -15,7 +15,10 @@ defmodule Hare.TortoiseClient do
   @connection_retry_delay 5_000
 
   defmodule State do
-    defstruct client_id: nil, connection: nil, app_handler: nil
+    defstruct connection: nil,
+              app_handler: nil,
+              client_id: nil,
+              connection_options: []
   end
 
   @doc "Start a Tortoise client"
@@ -61,25 +64,36 @@ defmodule Hare.TortoiseClient do
   @impl true
   def init(init_args) do
     app_handler = Keyword.get(init_args, :app_handler, Hare.DefaultAppHandler)
-    client_id = apply(app_handler, :client_id, [])
-    {:ok, %State{client_id: client_id, app_handler: app_handler}}
+    client_id = Keyword.get(init_args, :client_id, :no_name)
+    connection_options = Keyword.get(init_args, :connection_options, [])
+
+    {:ok,
+     %State{
+       client_id: client_id,
+       app_handler: app_handler,
+       connection_options: connection_options
+     }}
   end
 
   @impl true
   def handle_cast(
         {:connect, attempts},
-        %State{connection: nil, client_id: client_id, app_handler: app_handler} = state
+        %State{
+          connection: nil,
+          client_id: client_id,
+          app_handler: app_handler,
+          connection_options: connection_options
+        } = state
       ) do
     Logger.info("[Hare] Connecting Tortoise (#{attempts}/#{@max_connection_attempts})")
 
-    connection_options =
-      apply(app_handler, :tortoise_connection_options, [])
-      |> Keyword.put(:client_id, client_id)
+    tortoise_connection_options =
+      Keyword.put(connection_options, :client_id, client_id)
       |> Keyword.put(:handler, {Hare.TortoiseHandler, [app_handler: app_handler]})
 
     case Tortoise.Supervisor.start_child(
            ConnectionSupervisor,
-           connection_options
+           tortoise_connection_options
          ) do
       {:error, {:already_started, pid}} ->
         Logger.info("[Hare] Already connected to #{inspect(pid)}")
@@ -112,7 +126,7 @@ defmodule Hare.TortoiseClient do
     end
   end
 
-  def handle_cast({:connect, _client_id, _attempts}, state) do
+  def handle_cast({:connect, _attempts}, state) do
     Logger.warn("[Hare] Already connected to MQTT broker. No need to connect.")
     {:noreply, state}
   end
