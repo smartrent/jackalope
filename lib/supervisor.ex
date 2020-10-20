@@ -5,7 +5,8 @@ defmodule Hare.Supervisor do
   require Logger
   alias Hare.{Watchdog, TortoiseClient}
 
-  @type init_arg :: {:app_handler, module()}
+  @type init_arg ::
+          {:app_handler, module()} | {:client_id, atom()} | {:connection_options, Keyword.t()}
 
   @spec start_link([init_arg()]) :: Supervisor.on_start()
   def start_link(init_args \\ []) do

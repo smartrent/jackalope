@@ -5,14 +5,6 @@ defmodule Hare.DefaultAppHandler do
   require Logger
 
   @impl true
-  def tortoise_connection_options() do
-    []
-  end
-
-  @impl true
-  def client_id(), do: :no_name
-
-  @impl true
   def connection_status(status) do
     Logger.info("[Hare] Connection status is #{inspect(status)}")
     :ok
