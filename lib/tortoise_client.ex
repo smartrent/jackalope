@@ -100,17 +100,16 @@ defmodule Hare.TortoiseClient do
         apply(app_handler, :connection_status, [:up])
         {:noreply, %State{state | connection: pid}}
 
+      {:error, reason} when attempts > @max_connection_attempts ->
+        raise "Failed to connect to MQTT broker"
+
       {:error, reason} ->
         Logger.warn("[Hare] Failed to connect to MQTT broker: #{inspect(reason)}. Trying again.")
 
-        if attempts > @max_connection_attempts do
-          raise "Failed to connect to MQTT broker"
-        else
-          # TODO - Should we let it crash on first failed connection attempt? Is there value in retrying, after a delay?
-          Process.sleep(@connection_retry_delay)
-          connect(attempts + 1)
-          {:noreply, state}
-        end
+        # TODO - Should we let it crash on first failed connection attempt? Is there value in retrying, after a delay?
+        Process.sleep(@connection_retry_delay)
+        connect(attempts + 1)
+        {:noreply, state}
 
       {:ok, pid} ->
         Logger.info("[Hare] Connected with #{inspect(pid)}")
