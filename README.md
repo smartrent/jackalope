@@ -1,6 +1,6 @@
 # Hare
 
-A sample Tortoise client library
+A sample Tortoise client app
 
 ## Installation
 

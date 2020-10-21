@@ -32,7 +32,7 @@ defmodule Hare.Watchdog do
 
   @impl true
   def init(opts) do
-    client_id = Keyword.get(opts, :client_id, :no_name)
+    client_id = Keyword.fetch!(opts, :client_id)
     Process.send_after(self(), :heartbeat, @heartbeat_delay)
     {:ok, %State{client_id: client_id}}
   end

@@ -1,7 +1,7 @@
 defmodule Hare.AppHandler do
   @moduledoc "Behaviour to be implemented by applications using the Hare library"
 
-  @type client_id :: atom()
+  @type client_id :: String.t()
 
   @callback connection_status(:up | :down) :: :ok
   @callback tortoise_result(client_id, reference(), :ok | {:error, atom}) :: :ok
