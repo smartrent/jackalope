@@ -28,22 +28,22 @@ defmodule Hare.DefaultAppHandler do
   end
 
   @impl true
-  def message_received(client_id, topic, payload) do
+  def message_received(topic, payload) do
     Logger.info(
       "[Hare] Tortoise received message with topic #{inspect(topic)} and payload #{
         inspect(payload)
-      } for client #{inspect(client_id)}"
+      }"
     )
 
     :ok
   end
 
   @impl true
-  def invalid_payload(client_id, topic, payload) do
+  def invalid_payload(topic, payload) do
     Logger.info(
       "[Hare] Tortoise received an invalid message with topic #{inspect(topic)} and payload #{
         inspect(payload)
-      } for client #{inspect(client_id)}"
+      }"
     )
 
     :ok

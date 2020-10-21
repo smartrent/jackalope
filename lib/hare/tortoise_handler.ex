@@ -1,11 +1,12 @@
 defmodule Hare.TortoiseHandler do
   @moduledoc "Handles the callbacks from Tortoise"
   @behaviour Tortoise.Handler
+  require Logger
 
   ### CALLBACKS from Tortoise
 
-  def init(_opts) do
-    {:ok, nil}
+  def init(opts) do
+    {:ok, opts}
   end
 
   def connection(conn_status, state) do
@@ -26,21 +27,22 @@ defmodule Hare.TortoiseHandler do
     {:ok, state}
   end
 
-  def handle_message([client_id | sub_topic], payload_string, state) do
+  def handle_message(topic, payload_string, state) do
     app_handler = Keyword.fetch!(state, :app_handler)
 
     case Jason.decode(payload_string) do
       {:ok, payload} ->
-        apply(app_handler, :message_received, [client_id, sub_topic, payload])
+        apply(app_handler, :message_received, [topic, payload])
 
       {:error, _reason} ->
-        apply(app_handler, :invalid_payload, [client_id, sub_topic, payload_string])
+        apply(app_handler, :invalid_payload, [topic, payload_string])
     end
 
     {:ok, state}
   end
 
   def terminate(_some_reason, _state) do
+    Logger.info("[Hare] Tortoise reports termination")
     :ok
   end
 end

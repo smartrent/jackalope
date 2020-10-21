@@ -1,11 +1,11 @@
 defmodule Hare.AppHandler do
-  @moduledoc "Behaviour to be implemented by applications using the Hare library"
+  @moduledoc "Behaviour to be implemented by a module in an application using Hare"
 
   @type client_id :: String.t()
 
   @callback connection_status(:up | :down) :: :ok
   @callback tortoise_result(client_id, reference(), :ok | {:error, atom}) :: :ok
   @callback subscription(:up | :down, Tortoise.topic_filter()) :: :ok
-  @callback message_received(client_id, Tortoise.topic_filter(), String.t()) :: :ok
-  @callback invalid_payload(client_id, Tortoise.topic_filter(), String.t()) :: :ok
+  @callback message_received(Tortoise.topic_filter(), String.t()) :: :ok
+  @callback invalid_payload(Tortoise.topic_filter(), String.t()) :: :ok
 end

@@ -42,15 +42,15 @@ defmodule Hare.TortoiseClient do
   end
 
   @doc "Subscribe the hub to a topic"
-  @spec subscribe({String.t() | atom, integer}) :: {:ok, reference()} | {:error, atom}
+  @spec subscribe(String.t()) :: {:ok, reference()} | {:error, atom}
   def subscribe(topic) do
     GenServer.call(__MODULE__, {:subscribe, topic})
   end
 
   @doc "Unubscribe the hub from a topic"
-  @spec unsubscribe(String.t() | atom | integer) :: {:ok, reference()} | {:error, atom}
-  def unsubscribe(topics) do
-    GenServer.call(__MODULE__, {:unsubscribe, topics})
+  @spec unsubscribe(String.t()) :: {:ok, reference()} | {:error, atom}
+  def unsubscribe(topic) do
+    GenServer.call(__MODULE__, {:unsubscribe, topic})
   end
 
   @doc "Do we have an MQTT connection?"
@@ -90,6 +90,8 @@ defmodule Hare.TortoiseClient do
     tortoise_connection_options =
       Keyword.put(connection_options, :client_id, client_id)
       |> Keyword.put(:handler, {Hare.TortoiseHandler, [app_handler: app_handler]})
+
+    Logger.info("[Hare] Connecting with options #{inspect(tortoise_connection_options)}")
 
     case Tortoise.Supervisor.start_child(
            ConnectionSupervisor,
