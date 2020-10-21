@@ -8,6 +8,5 @@ import Config
 config :hare,
   client_id: "hare",
   mqtt_host: "localhost",
-  mqtt_port: 443,
-  mqtt_user_name: "hare",
-  mqtt_password: "tortoise"
+  mqtt_port: 1883,
+  base_topics: ~w(testing)

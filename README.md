@@ -1,6 +1,24 @@
 # Hare
 
-A sample Tortoise client app
+Hare is a sample MQTT application plus utility modules meant to simplify the use of Tortoise.
+
+## MQTT broker
+
+As currently configured, Hare expects an MQTT broker running on localhost via port 1883 with no security.
+
+## Usage
+
+```elixir
+Hare.connect()
+Hare.subscribe("racing")
+Hare.publish("racing", 123)
+Hare.unsubscribe("racing")
+```
+
+## Using mosquitto sub and pub
+
+mosquitto_sub -h localhost -p 1883 -t #
+mosquitto_pub -h localhost -p 1883 -t testing -m 123
 
 ## Installation
 

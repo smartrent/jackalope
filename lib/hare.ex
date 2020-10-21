@@ -20,6 +20,8 @@ defmodule Hare do
               failed_unsubscriptions: []
   end
 
+  ## Configuration support
+
   @spec client_id() :: String.t()
   def client_id(), do: Application.get_env(:hare, :client_id)
 
@@ -30,26 +32,46 @@ defmodule Hare do
         Tortoise.Transport.Tcp,
         host: mqtt_host(), port: mqtt_port()
       },
-      user_name: mqtt_user_name(),
-      password: mqtt_password(),
       will: %Tortoise.Package.Publish{
         topic: "#{client_id()}/message",
-        payload: "{\"code\": \"going_down\",\"msg\": \"Last will message\"}",
+        payload: "last will",
         dup: false,
         qos: @qos,
         retain: false
       },
       # Subcriptions are set after all devices inclusions are recovered
-      subscriptions: base_topics(),
+      subscriptions: initial_topics(),
       backoff: [min_interval: 100, max_interval: 30_000]
     ]
   end
 
+  ## MQTT-ing
+
+  def connect() do
+    GenServer.cast(__MODULE__, :connect)
+  end
+
+  def subscribe(topic) do
+    GenServer.cast(__MODULE__, {:subscribe, topic})
+  end
+
+  def unsubscribe(topic) do
+    GenServer.cast(__MODULE__, {:unsubscribe, topic})
+  end
+
   @doc "Publish an MQTT message"
-  @spec publish_message([Tortoise.topic()], map()) :: :ok
-  def publish_message(topic, payload) do
+  @spec publish([Tortoise.topic()], map()) :: :ok
+  def publish(topic, payload) do
     GenServer.cast(__MODULE__, {:publish, topic, payload})
   end
+
+  ## Testing
+
+  def status() do
+    GenServer.call(__MODULE__, :status)
+  end
+
+  ## GenServer
 
   def start_link(_) do
     Logger.info("[Hare] Starting #{inspect(__MODULE__)}...")
@@ -60,6 +82,7 @@ defmodule Hare do
 
   @impl true
   def connection_status(status) do
+    Logger.info("[Hare] Tortoise connection is #{inspect(status)}")
     GenServer.cast(__MODULE__, {:connection_status, status})
   end
 
@@ -76,27 +99,30 @@ defmodule Hare do
 
   @impl true
   def subscription(status, topic) do
-    Logger.info("[Hare] Requested subscription #{inspect(status)} for topic #{inspect(topic)}")
-    :ok
-  end
-
-  @impl true
-  def message_received(client_id, topic, payload) do
     Logger.info(
-      "[Hare] Tortoise received message with topic #{inspect(topic)} and payload #{
-        inspect(payload)
-      } for client #{inspect(client_id)}"
+      "[Hare] Subscription #{inspect(status)} for topic #{inspect(topic)} was requested"
     )
 
     :ok
   end
 
   @impl true
-  def invalid_payload(client_id, topic, payload) do
+  def message_received(topic, payload) do
+    Logger.info(
+      "[Hare] Tortoise received message with topic #{inspect(topic)} and payload #{
+        inspect(payload)
+      }"
+    )
+
+    :ok
+  end
+
+  @impl true
+  def invalid_payload(topic, payload) do
     Logger.info(
       "[Hare] Tortoise received an invalid message with topic #{inspect(topic)} and payload #{
         inspect(payload)
-      } for client #{inspect(client_id)}"
+      }"
     )
 
     :ok
@@ -110,12 +136,25 @@ defmodule Hare do
   end
 
   @impl true
-  def handle_cast({:connection_status, connection_status}, state) do
-    {:noreply, %State{state | connection_status: connection_status}}
+  def handle_cast(:connect, state) do
+    TortoiseClient.connect()
+    {:noreply, %State{state | subscriptions: initial_topics()}}
   end
 
   def handle_cast({:publish, topic, payload}, state) do
     {:noreply, publish_mqtt_message(topic, payload, state)}
+  end
+
+  def handle_cast({:subscribe, topic}, state) do
+    {:noreply, mqtt_subscribe(topic, state)}
+  end
+
+  def handle_cast({:unsubscribe, topic}, state) do
+    {:noreply, mqtt_unsubscribe(topic, state)}
+  end
+
+  def handle_cast({:connection_status, connection_status}, state) do
+    {:noreply, %State{state | connection_status: connection_status}}
   end
 
   def handle_cast(
@@ -145,49 +184,35 @@ defmodule Hare do
     {:noreply, updated_state}
   end
 
-  ### PRIVATE
-
-  defp publish_mqtt_message(
-         topic,
-         payload,
-         %State{
-           failed_messages: failed_messages,
-           pending_messages: pending_messages
-         } = state
-       ) do
-    updated_state = retry_failed(state)
-
-    case do_publish_message(topic, payload, client_id()) do
-      :ok ->
-        state
-
-      {:ok, reference} ->
-        Logger.debug(
-          "[Hare] Asked Tortoise to publish #{inspect(topic)} with #{inspect(payload)}. Got #{
-            inspect(reference)
-          }."
-        )
-
+  @impl true
+  def handle_call(
+        :status,
+        _from,
         %State{
-          updated_state
-          | pending_messages:
-              Map.put(pending_messages, reference, %{topic: topic, payload: payload})
-        }
-
-      {:error, reason} ->
-        Logger.warn(
-          "[Hare] Asked Tortoise to publish #{inspect(topic)} with #{inspect(payload)}. Got error #{
-            inspect(reason)
-          }."
-        )
-
-        {:noreply,
-         %State{
-           updated_state
-           | failed_messages: [%{topic: topic, payload: payload} | failed_messages]
-         }}
-    end
+          failed_messages: failed_messages,
+          pending_messages: pending_messages,
+          connection_status: connection_status,
+          pending_subscriptions: pending_subscriptions,
+          pending_unsubscriptions: pending_unsubscriptions,
+          subscriptions: subscriptions,
+          failed_subscriptions: failed_subscriptions,
+          failed_unsubscriptions: failed_unsubscriptions
+        } = state
+      ) do
+    {:reply,
+     %{
+       failed_messages: failed_messages,
+       pending_messages: pending_messages,
+       connection_status: connection_status,
+       pending_subscriptions: pending_subscriptions,
+       pending_unsubscriptions: pending_unsubscriptions,
+       subscriptions: subscriptions,
+       failed_subscriptions: failed_subscriptions,
+       failed_unsubscriptions: failed_unsubscriptions
+     }, state}
   end
+
+  ### PRIVATE
 
   defp mqtt_subscribe(
          topic,
@@ -237,11 +262,55 @@ defmodule Hare do
     end
   end
 
-  defp do_publish_message(topic, payload, client_id) do
-    topic =
-      [client_id | topic]
-      |> Enum.join("/")
+  defp publish_mqtt_message(
+         topic,
+         payload,
+         %State{
+           failed_messages: failed_messages,
+           pending_messages: pending_messages
+         } = state
+       ) do
+    updated_state = retry_failed(state)
 
+    case do_publish_message(topic, payload) do
+      :ok ->
+        state
+
+      {:ok, reference} ->
+        Logger.debug(
+          "[Hare] Asked Tortoise to publish #{inspect(topic)} with #{inspect(payload)}. Got #{
+            inspect(reference)
+          }."
+        )
+
+        %State{
+          updated_state
+          | pending_messages:
+              Map.put(pending_messages, reference, %{topic: topic, payload: payload})
+        }
+
+      {:error, reason} ->
+        Logger.warn(
+          "[Hare] Asked Tortoise to publish #{inspect(topic)} with #{inspect(payload)}. Got error #{
+            inspect(reason)
+          }."
+        )
+
+        {:noreply,
+         %State{
+           updated_state
+           | failed_messages: [%{topic: topic, payload: payload} | failed_messages]
+         }}
+    end
+  end
+
+  defp do_publish_message(topic, payload) when is_list(topic) do
+    topic = Enum.join(topic, "/")
+
+    TortoiseClient.publish(topic, payload)
+  end
+
+  defp do_publish_message(topic, payload) do
     TortoiseClient.publish(topic, payload)
   end
 
@@ -387,10 +456,10 @@ defmodule Hare do
     end
   end
 
-  defp base_topics(), do: []
+  defp initial_topics() do
+    Application.get_env(:hare, :base_topics, [])
+  end
 
   defp mqtt_host(), do: Application.get_env(:hare, :mqtt_host)
   defp mqtt_port(), do: Application.get_env(:hare, :mqtt_port)
-  defp mqtt_user_name(), do: Application.get_env(:hare, :mqtt_user_name)
-  defp mqtt_password(), do: Application.get_env(:hare, :mqtt_password)
 end
