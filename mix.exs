@@ -16,6 +16,7 @@ defmodule Hare.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
+      mod: {Hare.Application, []},
       extra_applications: [:logger]
     ]
   end
@@ -30,12 +31,11 @@ defmodule Hare.MixProject do
   end
 
   defp description do
-    "A sample Tortoise client"
+    "A sample Tortoise client application"
   end
 
   defp package do
     [
-      licenses: ["Apache-2.0"],
       links: %{"GitHub" => "https://github.com/smartrent/hare"}
     ]
   end
