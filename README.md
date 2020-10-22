@@ -9,7 +9,7 @@ As currently configured, Hare expects an MQTT broker running on localhost via po
 ## Usage
 
 ```elixir
-Hare.connect()
+# the client should connect automatically when the broker is available
 Hare.subscribe("racing")
 Hare.publish("racing", 123)
 Hare.unsubscribe("racing")

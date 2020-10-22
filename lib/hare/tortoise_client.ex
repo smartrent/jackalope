@@ -28,13 +28,6 @@ defmodule Hare.TortoiseClient do
     GenServer.start_link(__MODULE__, init_args, name: __MODULE__)
   end
 
-  @doc "Connect via Tortoise to MQTT broker"
-  @spec connect(non_neg_integer) ::
-          :ok
-  def connect(attempts \\ 0) do
-    GenServer.cast(__MODULE__, {:connect, attempts})
-  end
-
   @doc "Publish a message"
   @spec publish(String.t(), map()) :: :ok | {:ok, reference()} | {:error, atom}
   def publish(topic, payload, timeout \\ 60_000) do
@@ -76,59 +69,39 @@ defmodule Hare.TortoiseClient do
     client_id = Keyword.get(init_args, :client_id, :no_name)
     connection_options = Keyword.get(init_args, :connection_options, [])
 
-    {:ok,
-     %State{
-       client_id: client_id,
-       app_handler: app_handler,
-       connection_options: connection_options
-     }}
+    initial_state = %State{
+      client_id: client_id,
+      app_handler: app_handler,
+      connection_options: connection_options
+    }
+
+    {:ok, initial_state, {:continue, :spawn_connection}}
   end
 
-  @impl true
-  def handle_cast(
-        {:connect, attempts},
-        %State{
-          connection: nil,
-          client_id: client_id,
-          app_handler: app_handler,
-          connection_options: connection_options
-        } = state
-      ) do
-    Logger.info("[Hare] Connecting Tortoise (#{attempts}/#{@max_connection_attempts})")
+  def handle_continue(:spawn_connection, %State{connection: nil} = state) do
+    Logger.info("[Hare] Spawning Tortoise connection")
+    # Attempt to spawn a tortoise connection to the MQTT server; the
+    # tortoise will attempt to connect to the server, so we are not
+    # fully up once we got the process
+    handler = {Hare.TortoiseHandler, [app_handler: state.app_handler]}
 
-    tortoise_connection_options =
-      Keyword.put(connection_options, :client_id, client_id)
-      |> Keyword.put(:handler, {Hare.TortoiseHandler, [app_handler: app_handler]})
+    conn_opts =
+      state.connection_options
+      |> Keyword.put(:client_id, state.client_id)
+      |> Keyword.put(:handler, handler)
 
-    Logger.info("[Hare] Connecting with options #{inspect(tortoise_connection_options)}")
+    case Tortoise.Supervisor.start_child(ConnectionSupervisor, conn_opts) do
+      {:ok, pid} ->
+        state = %State{state | connection: pid}
+        {:noreply, state, {:continue, :subscribe_to_connection}}
 
-    case Tortoise.Supervisor.start_child(
-           ConnectionSupervisor,
-           tortoise_connection_options
-         ) do
       {:error, {:already_started, pid}} ->
-        Logger.info("[Hare] Already connected to #{inspect(pid)}")
-        apply(app_handler, :connection_status, [:up])
-        {:noreply, %State{state | connection: pid}}
-
-      {:error, reason} when attempts > @max_connection_attempts ->
-        raise "Failed to connect to MQTT broker"
+        state = %State{state | connection: pid}
+        {:noreply, state, {:continue, :subscribe_to_connection}}
 
       {:error, reason} ->
-        Logger.warn("[Hare] Failed to connect to MQTT broker: #{inspect(reason)}. Trying again.")
-
-        # TODO - Should we let it crash on first failed connection attempt? Is there value in retrying, after a delay?
-        Process.sleep(@connection_retry_delay)
-        connect(attempts + 1)
-        {:noreply, state}
-
-      {:ok, pid} ->
-        Logger.info("[Hare] Connected with #{inspect(pid)}")
-        {:noreply, %State{state | connection: pid}}
-
-      {:ok, pid, _} ->
-        Logger.info("[Hare] Connected with #{inspect(pid)}")
-        {:noreply, %State{state | connection: pid}}
+        Logger.error("[Hare] Failed to create MQTT client: #{inspect(reason)}")
+        {:stop, {:connection_failure, reason}, state}
 
       :ignore ->
         Logger.warn("[Hare] Starting Tortoise connection IGNORED!")
@@ -136,14 +109,30 @@ defmodule Hare.TortoiseClient do
     end
   end
 
-  def handle_cast({:connect, _attempts}, state) do
+  def handle_continue(:spawn_connection, %State{connection: pid} = state) when is_pid(pid) do
     Logger.warn("[Hare] Already connected to MQTT broker. No need to connect.")
     {:noreply, state}
   end
 
+  def handle_continue(:subscribe_to_connection, %State{connection: pid} = state)
+      when is_pid(pid) do
+    # Create an active subscription to the tortoise connection; this
+    # will allow us to react to network up and down events as we will
+    # get a Tortoise Event when the network status changes
+    case Tortoise.Connection.connection(state.client_id, active: true) do
+      {:ok, _connection} ->
+        {:ok, _} = Tortoise.Events.register(state.client_id, :status)
+        {:noreply, state}
+
+      {:error, reason} when reason in [:timeout, :unknown_connection] ->
+        {:stop, {:connection_failure, reason}, state}
+    end
+  end
+
   @impl true
   def handle_call(:connected?, _from, %State{connection: pid} = state) do
-    {:reply, pid != nil, state}
+    tortoise_state = is_pid(pid) and Process.alive?(pid)
+    {:reply, tortoise_state, state}
   end
 
   def handle_call({:subscribe, topic}, _from, %State{connection: nil} = state) do
@@ -171,6 +160,27 @@ defmodule Hare.TortoiseClient do
   end
 
   @impl true
+  # Tortoise network status changes
+  def handle_info(
+        {{Tortoise, client_id}, :status, network_status},
+        %State{client_id: client_id, app_handler: app_handler} = state
+      ) do
+    case network_status do
+      :up ->
+        Logger.info("[Hare] MQTT client is online (#{client_id})")
+        apply(app_handler, :connection_status, [:up])
+        {:noreply, state}
+
+      :down ->
+        Logger.info("[Hare] MQTT client is offline (#{client_id})")
+        {:noreply, state}
+
+      :terminating ->
+        Logger.info("[Hare] MQTT client is terminating (#{client_id})")
+        {:noreply, state}
+    end
+  end
+
   # result is :ok or {:error, reason}
   # reference is known from prior publish, subscribe or unsubscribe
   def handle_info(
