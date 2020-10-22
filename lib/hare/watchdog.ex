@@ -72,7 +72,7 @@ defmodule Hare.Watchdog do
 
   defp ping_tortoise(client_id) do
     case Tortoise.Connection.ping_sync(client_id, @alive_timeout) do
-      {:ok, _ref} ->
+      {:ok, _latency} ->
         Logger.info("[Hare] Watchdog - Connection to MQTT broker is alive")
         :ok
 
