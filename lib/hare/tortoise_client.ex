@@ -37,8 +37,17 @@ defmodule Hare.TortoiseClient do
 
   @doc "Publish a message"
   @spec publish(String.t(), map()) :: :ok | {:ok, reference()} | {:error, atom}
-  def publish(topic, payload) do
-    GenServer.call(__MODULE__, {:publish, topic, payload}, 60_000)
+  def publish(topic, payload, timeout \\ 60_000) do
+    json_encoded_payload =
+      case Jason.encode(payload) do
+        {:ok, encoded_payload} ->
+          encoded_payload
+
+        {:error, reason} ->
+          "Unable to encode: #{inspect(payload)} reason: #{inspect(reason)}"
+      end
+
+    GenServer.call(__MODULE__, {:publish, topic, json_encoded_payload}, timeout)
   end
 
   @doc "Subscribe the hub to a topic"
@@ -174,18 +183,9 @@ defmodule Hare.TortoiseClient do
   end
 
   defp do_publish(topic, payload, client_id) do
-    payload_j =
-      case Jason.encode(payload) do
-        {:ok, encoded_payload} ->
-          encoded_payload
-
-        {:error, reason} ->
-          "Unable to encode: #{inspect(payload)} reason: #{inspect(reason)}"
-      end
-
-    Logger.info("[Hare] Publishing #{topic} with payload #{payload_j}")
+    Logger.info("[Hare] Publishing #{topic} with payload #{payload}")
     # Async publish
-    case Tortoise.publish(client_id, topic, payload_j, qos: @qos, timeout: @publish_timeout) do
+    case Tortoise.publish(client_id, topic, payload, qos: @qos, timeout: @publish_timeout) do
       :ok ->
         :ok
 
