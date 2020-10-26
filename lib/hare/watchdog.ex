@@ -4,14 +4,13 @@ defmodule Hare.Watchdog do
   use GenServer
   require Logger
 
-  @heartbeat_delay 120_000
-  @max_wait 30_000
-  @alive_timeout 5_000
-
   defmodule State do
     defstruct client_id: nil,
               # until proved otherwise
-              alive?: true
+              alive?: true,
+              heartbeat_delay: 120_000,
+              max_wait: 30_000,
+              alive_timeout: 5_000
   end
 
   @doc "FOR TESTING ONLY - Causes a crash"
@@ -32,9 +31,19 @@ defmodule Hare.Watchdog do
 
   @impl true
   def init(opts) do
-    client_id = Keyword.fetch!(opts, :client_id)
-    Process.send_after(self(), :heartbeat, @heartbeat_delay)
-    {:ok, %State{client_id: client_id}}
+    case struct(State, opts) do
+      %State{client_id: nil} ->
+        {:stop, :missing_client_id}
+
+      %State{} = initial_state ->
+        {:ok, initial_state, {:continue, :schedule_heartbeat}}
+    end
+  end
+
+  @impl true
+  def handle_continue(:schedule_heartbeat, %State{heartbeat_delay: timeout} = state) do
+    Process.send_after(self(), :heartbeat, timeout)
+    {:noreply, state}
   end
 
   @impl true
@@ -49,29 +58,25 @@ defmodule Hare.Watchdog do
 
   @impl true
   def handle_info(:heartbeat, %State{client_id: client_id} = state) do
-    response =
-      try do
-        answer =
-          Task.async(fn -> ping_tortoise(client_id) end)
-          |> Task.await(@max_wait)
+    try do
+      answer =
+        Task.async(fn -> ping_tortoise(client_id, state.alive_timeout) end)
+        |> Task.await(state.max_wait)
 
-        Process.send_after(self(), :heartbeat, @heartbeat_delay)
-        answer
-      catch
-        :exit, reason ->
-          # Crash if the ping message was apparently not handled by Tortoise.Connection,
-          # indicating that the processing of its message queue is somehow suspended
-          Logger.warn("[Hare] Watchdog - Tortoise.Connection is unresponsive: #{inspect(reason)}")
+      state = %State{state | alive?: answer == :ok}
+      {:noreply, state, {:continue, :schedule_heartbeat}}
+    catch
+      :exit, reason ->
+        # Crash if the ping message was apparently not handled by Tortoise.Connection,
+        # indicating that the processing of its message queue is somehow suspended
+        Logger.warn("[Hare] Watchdog - Tortoise.Connection is unresponsive: #{inspect(reason)}")
 
-          raise "CRASH!"
-      end
-
-    alive? = response == :ok
-    {:noreply, %State{state | alive?: alive?}}
+        raise "CRASH!"
+    end
   end
 
-  defp ping_tortoise(client_id) do
-    case Tortoise.Connection.ping_sync(client_id, @alive_timeout) do
+  defp ping_tortoise(client_id, timeout) do
+    case Tortoise.Connection.ping_sync(client_id, timeout) do
       {:ok, _latency} ->
         Logger.info("[Hare] Watchdog - Connection to MQTT broker is alive")
         :ok
