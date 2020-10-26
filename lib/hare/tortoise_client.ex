@@ -8,17 +8,14 @@ defmodule Hare.TortoiseClient do
 
   require Logger
 
-  @publish_timeout 30_000
-  # at least once
-  @qos 1
-  @max_connection_attempts 5
-  @connection_retry_delay 5_000
-
   defmodule State do
     defstruct connection: nil,
-              app_handler: nil,
+              app_handler: Hare.DefaultAppHandler,
               client_id: nil,
-              connection_options: []
+              connection_options: [],
+              publish_timeout: 30_000,
+              # at least once
+              default_qos: 1
   end
 
   @doc "Start a Tortoise client"
@@ -29,9 +26,15 @@ defmodule Hare.TortoiseClient do
   end
 
   @doc "Publish a message"
-  @spec publish(String.t(), map()) :: :ok | {:ok, reference()} | {:error, atom}
-  def publish(topic, payload, timeout \\ 60_000) do
-    json_encoded_payload =
+  @spec publish(String.t(), map(), opts :: Keyword.t() | non_neg_integer) ::
+          :ok | {:ok, reference()} | {:error, atom}
+  def publish(topic, payload, opts \\ [])
+
+  def publish(topic, payload, opts) when is_list(opts) do
+    {client_opts, opts} = Keyword.split(opts, [:timeout])
+    timeout = Keyword.get(client_opts, :timeout, 60_000)
+
+    json_payload =
       case Jason.encode(payload) do
         {:ok, encoded_payload} ->
           encoded_payload
@@ -40,7 +43,12 @@ defmodule Hare.TortoiseClient do
           "Unable to encode: #{inspect(payload)} reason: #{inspect(reason)}"
       end
 
-    GenServer.call(__MODULE__, {:publish, topic, json_encoded_payload}, timeout)
+    GenServer.call(__MODULE__, {:publish, topic, json_payload, opts}, timeout)
+  end
+
+  def publish(topic, payload, timeout) when is_integer(timeout) and timeout >= 0 do
+    # lift timeout to options
+    publish(topic, payload, timeout: timeout)
   end
 
   @doc "Subscribe the hub to a topic"
@@ -64,18 +72,14 @@ defmodule Hare.TortoiseClient do
   ### GenServer CALLBACKS
 
   @impl true
-  def init(init_args) do
-    app_handler = Keyword.get(init_args, :app_handler, Hare.DefaultAppHandler)
-    client_id = Keyword.get(init_args, :client_id, :no_name)
-    connection_options = Keyword.get(init_args, :connection_options, [])
+  def init(opts) do
+    case struct(State, opts) do
+      %State{client_id: nil} ->
+        {:stop, :missing_client_id}
 
-    initial_state = %State{
-      client_id: client_id,
-      app_handler: app_handler,
-      connection_options: connection_options
-    }
-
-    {:ok, initial_state, {:continue, :spawn_connection}}
+      %State{} = initial_state ->
+        {:ok, initial_state, {:continue, :spawn_connection}}
+    end
   end
 
   def handle_continue(:spawn_connection, %State{connection: nil} = state) do
@@ -155,8 +159,8 @@ defmodule Hare.TortoiseClient do
     {:reply, Tortoise.Connection.unsubscribe(client_id, topic), state}
   end
 
-  def handle_call({:publish, topic, payload}, _from, %State{client_id: client_id} = state) do
-    {:reply, do_publish(topic, payload, client_id), state}
+  def handle_call({:publish, topic, payload, opts}, _from, %State{client_id: client_id} = state) do
+    {:reply, do_publish(state, topic, payload, opts), state}
   end
 
   @impl true
@@ -192,10 +196,11 @@ defmodule Hare.TortoiseClient do
     {:noreply, state}
   end
 
-  defp do_publish(topic, payload, client_id) do
+  defp do_publish(%State{client_id: client_id} = state, topic, payload, opts) do
+    qos = Keyword.get(opts, :qos, state.default_qos)
     Logger.info("[Hare] Publishing #{topic} with payload #{payload}")
     # Async publish
-    case Tortoise.publish(client_id, topic, payload, qos: @qos, timeout: @publish_timeout) do
+    case Tortoise.publish(client_id, topic, payload, qos: qos, timeout: client_id) do
       :ok ->
         :ok
 
