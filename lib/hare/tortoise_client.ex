@@ -52,15 +52,16 @@ defmodule Hare.TortoiseClient do
   end
 
   @doc "Subscribe the hub to a topic"
-  @spec subscribe(String.t()) :: {:ok, reference()} | {:error, atom}
-  def subscribe(topic) do
-    GenServer.call(__MODULE__, {:subscribe, topic})
+  @spec subscribe(String.t(), opts :: Keyword.t()) :: {:ok, reference()} | {:error, atom}
+  def subscribe(topic, opts \\ []) do
+    opts = Keyword.put_new(opts, :qos, 1)
+    GenServer.call(__MODULE__, {:subscribe, topic, opts})
   end
 
   @doc "Unubscribe the hub from a topic"
-  @spec unsubscribe(String.t()) :: {:ok, reference()} | {:error, atom}
-  def unsubscribe(topic) do
-    GenServer.call(__MODULE__, {:unsubscribe, topic})
+  @spec unsubscribe(String.t(), opts :: Keyword.t()) :: {:ok, reference()} | {:error, atom}
+  def unsubscribe(topic_filter, opts \\ []) do
+    GenServer.call(__MODULE__, {:unsubscribe, topic_filter, opts})
   end
 
   @doc "Do we have an MQTT connection?"
@@ -139,24 +140,29 @@ defmodule Hare.TortoiseClient do
     {:reply, tortoise_state, state}
   end
 
-  def handle_call({:subscribe, topic}, _from, %State{connection: nil} = state) do
+  def handle_call({:subscribe, topic, _opts}, _from, %State{connection: nil} = state) do
     Logger.warn("[Hare] Can't subscribe to #{inspect(topic)}: No connection")
     {:reply, {:error, :no_connection}, state}
   end
 
-  def handle_call({:subscribe, topic}, _from, %State{client_id: client_id} = state) do
+  def handle_call({:subscribe, topic, opts}, _from, %State{client_id: client_id} = state) do
+    qos = Keyword.get(opts, :qos, 1)
     Logger.debug("[Hare] Subscribing #{client_id} to #{inspect(topic)}")
-    {:reply, Tortoise.Connection.subscribe(client_id, {topic, @qos}), state}
+    {:reply, Tortoise.Connection.subscribe(client_id, {topic, qos}), state}
   end
 
-  def handle_call({:unsubscribe, topic}, _from, %State{connection: nil} = state) do
-    Logger.warn("[Hare] Can't unsubscribe from #{inspect(topic)}: No connection")
+  def handle_call({:unsubscribe, topic_filter, _opts}, _from, %State{connection: nil} = state) do
+    Logger.warn("[Hare] Can't unsubscribe from #{inspect(topic_filter)}: No connection")
     {:reply, {:error, :no_connection}, state}
   end
 
-  def handle_call({:unsubscribe, topic}, _from, %State{client_id: client_id} = state) do
-    Logger.info("[Hare] Unsubscribing #{client_id} from topic #{inspect(topic)}")
-    {:reply, Tortoise.Connection.unsubscribe(client_id, topic), state}
+  def handle_call(
+        {:unsubscribe, topic_filter, _opts},
+        _from,
+        %State{client_id: client_id} = state
+      ) do
+    Logger.info("[Hare] Unsubscribing #{client_id} from topic #{inspect(topic_filter)}")
+    {:reply, Tortoise.Connection.unsubscribe(client_id, topic_filter), state}
   end
 
   def handle_call({:publish, topic, payload, opts}, _from, %State{client_id: client_id} = state) do
