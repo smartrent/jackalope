@@ -204,6 +204,7 @@ defmodule Hare do
         end
 
       {:error, reason} ->
+        Logger.warn("Retrying message, failed with reason: #{inspect reason}")
         state = %State{state | work_list: [cmd | state.work_list]}
         {:noreply, state}
     end
@@ -259,7 +260,7 @@ defmodule Hare do
     TortoiseClient.publish(topic, payload, opts)
   end
 
-  defp execute_work({:subscribe, topic_filter, opts} = subscribe) do
+  defp execute_work({:subscribe, topic_filter, opts}) do
     TortoiseClient.subscribe(topic_filter, opts)
   end
 

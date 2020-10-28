@@ -83,6 +83,7 @@ defmodule Hare.TortoiseClient do
     end
   end
 
+  @impl true
   def handle_continue(:spawn_connection, %State{connection: nil} = state) do
     Logger.info("[Hare] Spawning Tortoise connection")
     # Attempt to spawn a tortoise connection to the MQTT server; the
@@ -165,7 +166,7 @@ defmodule Hare.TortoiseClient do
     {:reply, Tortoise.Connection.unsubscribe(client_id, topic_filter), state}
   end
 
-  def handle_call({:publish, topic, payload, opts}, _from, %State{client_id: client_id} = state) do
+  def handle_call({:publish, topic, payload, opts}, _from, %State{} = state) do
     {:reply, do_publish(state, topic, payload, opts), state}
   end
 
