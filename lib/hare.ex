@@ -84,6 +84,10 @@ defmodule Hare do
     GenServer.call(__MODULE__, :status)
   end
 
+  def reconnect() do
+    GenServer.cast(__MODULE__, :reconnect)
+  end
+
   ### AppHandler callbacks
 
   @impl true
@@ -158,7 +162,8 @@ defmodule Hare do
     {:noreply, state, {:continue, :consume_work_list}}
   end
 
-  def handle_cast({:connection_status, :down}, state) do
+  def handle_cast({:connection_status, status}, state)
+      when status in [:down, :terminating, :terminated] do
     {:noreply, %State{state | connection_status: :offline}}
   end
 
@@ -204,7 +209,7 @@ defmodule Hare do
         end
 
       {:error, reason} ->
-        Logger.warn("Retrying message, failed with reason: #{inspect reason}")
+        Logger.warn("Retrying message, failed with reason: #{inspect(reason)}")
         state = %State{state | work_list: [cmd | state.work_list]}
         {:noreply, state}
     end
@@ -218,6 +223,40 @@ defmodule Hare do
     work_list = [cmd | work_list]
     state = %State{state | work_list: work_list}
     {:noreply, state, {:continue, :consume_work_list}}
+  end
+
+  def handle_cast(:reconnect, state) do
+    :ok = Hare.TortoiseClient.reconnect()
+
+    state = %State{
+      state
+      | connection_status: :offline,
+        # reset the subscriptions and resubscribe to all the current
+        # subscriptions. Note; MQTT sessions should be able to handle
+        # this, but we do it for good measure to ensure a consistent
+        # state of the world; an upcoming Tortoise version will track
+        # this state in the connection state, and the user can ask for
+        # it, so this problem will go away in the future; we will also
+        # republish all the messages we got in pending; this might
+        # result in messages being sent twice, but this is already an
+        # issue with QoS=1 messages
+        subscriptions: %{},
+        pending: %{},
+        work_list:
+          Enum.concat([
+            for(
+              {topic_filter, opts} <- state.subscriptions,
+              do: {:subscribe, topic_filter, opts}
+            ),
+            for(
+              {ref, cmd} when is_reference(ref) <- state.pending,
+              do: cmd
+            ),
+            state.work_list
+          ])
+    }
+
+    {:noreply, state}
   end
 
   @impl true
