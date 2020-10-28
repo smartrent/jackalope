@@ -1,23 +1,33 @@
 defmodule Hare do
-  @moduledoc "MQTT application logic"
+  @moduledoc """
+  MQTT application logic
+
+  The Hare module will serve as a message box, tracking the status of
+  the messages currently handled by Tortoise. This part of the
+  application is not supervised in the same supervision branch as
+  Tortoise, so we shouldn't drop important messages if Tortoise, or
+  any of its siblings should crash; and we should retry messages that
+  was not delivered for whatever reason.
+  """
 
   use GenServer
 
   @behaviour Hare.AppHandler
   require Logger
+
+  alias __MODULE__, as: State
   alias Hare.TortoiseClient
 
   @qos 1
 
-  defmodule State do
-    defstruct connection_status: nil,
-              failed_messages: [],
-              pending_messages: %{},
-              pending_subscriptions: %{},
-              pending_unsubscriptions: %{},
-              subscriptions: [],
-              failed_subscriptions: [],
-              failed_unsubscriptions: []
+  defstruct connection_status: :offline,
+            work_list: [],
+            pending: %{},
+            subscriptions: %{}
+
+  def start_link(_) do
+    Logger.info("[Hare] Starting #{inspect(__MODULE__)}...")
+    GenServer.start_link(__MODULE__, nil, name: __MODULE__)
   end
 
   ## Configuration support
@@ -40,42 +50,38 @@ defmodule Hare do
         retain: false
       },
       # Subcriptions are set after all devices inclusions are recovered
-      subscriptions: initial_topics(),
       backoff: [min_interval: 100, max_interval: 30_000]
     ]
   end
 
   ## MQTT-ing
-
-  def connect() do
-    GenServer.cast(__MODULE__, :connect)
+  def subscribe(topic_filter, opts \\ []) do
+    cmd = {:subscribe, topic_filter, opts}
+    GenServer.cast(__MODULE__, {:cmd, cmd})
   end
 
-  def subscribe(topic) do
-    GenServer.cast(__MODULE__, {:subscribe, topic})
-  end
-
-  def unsubscribe(topic) do
-    GenServer.cast(__MODULE__, {:unsubscribe, topic})
+  def unsubscribe(topic_filter, opts \\ []) do
+    cmd = {:unsubscribe, topic_filter, opts}
+    GenServer.cast(__MODULE__, {:cmd, cmd})
   end
 
   @doc "Publish an MQTT message"
-  @spec publish([Tortoise.topic()], map()) :: :ok
-  def publish(topic, payload) do
-    GenServer.cast(__MODULE__, {:publish, topic, payload})
+  @spec publish([Tortoise.topic()], map(), opts :: Keyword.t()) :: :ok
+  def publish(topic, payload, opts \\ [])
+
+  def publish(topic, payload, opts) when is_list(topic) do
+    topic = Enum.join(topic, "/")
+    publish(topic, payload, opts)
+  end
+
+  def publish(topic, payload, opts) do
+    cmd = {:publish, topic, payload, opts}
+    GenServer.cast(__MODULE__, {:cmd, cmd})
   end
 
   ## Testing
-
   def status() do
     GenServer.call(__MODULE__, :status)
-  end
-
-  ## GenServer
-
-  def start_link(_) do
-    Logger.info("[Hare] Starting #{inspect(__MODULE__)}...")
-    GenServer.start_link(__MODULE__, nil, name: __MODULE__)
   end
 
   ### AppHandler callbacks
@@ -132,328 +138,135 @@ defmodule Hare do
 
   @impl true
   def init(_) do
-    {:ok, %State{}}
+    # Produce subscription commands for the initial subscriptions
+    work_list =
+      for topic_filter <- initial_topics(),
+          do: {:subscribe, topic_filter, []}
+
+    {:ok, %State{work_list: work_list}, {:continue, :consume_work_list}}
   end
 
   @impl true
-  def handle_cast(:connect, state) do
-    TortoiseClient.connect()
-    {:noreply, %State{state | subscriptions: initial_topics()}}
+  def handle_call(:status, _from, %State{} = state) do
+    {:reply, Map.from_struct(state), state}
   end
 
-  def handle_cast({:publish, topic, payload}, state) do
-    {:noreply, publish_mqtt_message(topic, payload, state)}
+  @impl true
+  # Connection status changes
+  def handle_cast({:connection_status, :up}, state) do
+    state = %State{state | connection_status: :online}
+    {:noreply, state, {:continue, :consume_work_list}}
   end
 
-  def handle_cast({:subscribe, topic}, state) do
-    {:noreply, mqtt_subscribe(topic, state)}
+  def handle_cast({:connection_status, :down}, state) do
+    {:noreply, %State{state | connection_status: :offline}}
   end
 
-  def handle_cast({:unsubscribe, topic}, state) do
-    {:noreply, mqtt_unsubscribe(topic, state)}
-  end
-
-  def handle_cast({:connection_status, connection_status}, state) do
-    {:noreply, %State{state | connection_status: connection_status}}
-  end
-
+  # Handle responses to user initiated commands; subscribe,
+  # unsubscribe, publish...
   def handle_cast(
-        {:tortoise_result, _client_id, reference, result},
-        %State{
-          pending_messages: pending_messages,
-          pending_subscriptions: pending_subscriptions,
-          pending_unsubscriptions: pending_unsubscriptions
-        } = state
+        {:tortoise_result, _client_id, ref, res},
+        %State{pending: pending} = state
       ) do
-    updated_state =
-      cond do
-        Map.get(pending_messages, reference) != nil ->
-          process_publishing_result(reference, result, state)
+    {cmd, pending} = Map.pop(pending, ref)
+    state = %State{state | pending: pending}
 
-        Map.get(pending_subscriptions, reference) != nil ->
-          process_subscription_result(reference, result, state)
+    case res do
+      _unknown_ref when is_nil(cmd) ->
+        Logger.info("Received unknown ref from Tortoise: #{inspect(ref)}")
+        {:noreply, state}
 
-        Map.get(pending_unsubscriptions, reference) != nil ->
-          process_unsubscription_result(reference, result, state)
+      :ok ->
+        case cmd do
+          {:subscribe, topic, opts} ->
+            # Note that all subscriptions has to go through Hare; for
+            # that reason we cannot use the "initial subscriptions" in
+            # Tortoise, as Hare would not know about them; the
+            # upcoming Tortoise will expose a function for the
+            # subscriptions state!
+            state = %State{
+              state
+              | subscriptions: Map.put(state.subscriptions, topic, opts)
+            }
 
-        true ->
-          Logger.warn("[Hubbub] Ignoring unknown Tortoise result reference #{inspect(reference)}")
-          state
-      end
+            {:noreply, state}
 
-    {:noreply, updated_state}
+          {:unsubscribe, topic, _opts} ->
+            state = %State{
+              state
+              | subscriptions: Map.delete(state.subscriptions, topic)
+            }
+
+            {:noreply, state}
+
+          _otherwise ->
+            {:noreply, state}
+        end
+
+      {:error, reason} ->
+        state = %State{state | work_list: [cmd | state.work_list]}
+        {:noreply, state}
+    end
+  end
+
+  def handle_cast({:cmd, cmd}, %State{work_list: work_list} = state) do
+    # Note that we don't really concern ourselves with the order of
+    # the commands; the worklist is a list (and thus a stack) and when
+    # we retry a message it will reenter the work list at the front,
+    # and it could already have messages, etc.
+    work_list = [cmd | work_list]
+    state = %State{state | work_list: work_list}
+    {:noreply, state, {:continue, :consume_work_list}}
   end
 
   @impl true
-  def handle_call(
-        :status,
-        _from,
+  def handle_continue(:consume_work_list, %State{connection_status: :offline} = state) do
+    # postpone consuming from the work list till we are online again!
+    {:noreply, state}
+  end
+
+  def handle_continue(:consume_work_list, %State{work_list: []} = state) do
+    # base-case; we are done consuming and will idle until more work
+    # is produced
+    {:noreply, state}
+  end
+
+  # reductive case, consume work untill the work list is empty
+  def handle_continue(
+        :consume_work_list,
         %State{
-          failed_messages: failed_messages,
-          pending_messages: pending_messages,
-          connection_status: connection_status,
-          pending_subscriptions: pending_subscriptions,
-          pending_unsubscriptions: pending_unsubscriptions,
-          subscriptions: subscriptions,
-          failed_subscriptions: failed_subscriptions,
-          failed_unsubscriptions: failed_unsubscriptions
+          connection_status: :online,
+          work_list: [cmd | remaining],
+          pending: pending
         } = state
       ) do
-    {:reply,
-     %{
-       failed_messages: failed_messages,
-       pending_messages: pending_messages,
-       connection_status: connection_status,
-       pending_subscriptions: pending_subscriptions,
-       pending_unsubscriptions: pending_unsubscriptions,
-       subscriptions: subscriptions,
-       failed_subscriptions: failed_subscriptions,
-       failed_unsubscriptions: failed_unsubscriptions
-     }, state}
-  end
+    state = %State{state | work_list: remaining}
 
-  ### PRIVATE
-
-  defp mqtt_subscribe(
-         topic,
-         %State{
-           pending_subscriptions: pending_subscriptions,
-           failed_subscriptions: failed_subscriptions
-         } = state
-       ) do
-    updated_state = retry_failed(state)
-
-    case TortoiseClient.subscribe(topic) do
-      {:ok, reference} ->
-        %State{
-          updated_state
-          | pending_subscriptions: Map.put(pending_subscriptions, reference, topic)
-        }
-
-      {:error, _reason} ->
-        %State{
-          updated_state
-          | failed_subscriptions: [topic | failed_subscriptions]
-        }
-    end
-  end
-
-  defp mqtt_unsubscribe(
-         topic,
-         %State{
-           pending_unsubscriptions: pending_unsubscriptions,
-           failed_unsubscriptions: failed_unsubscriptions
-         } = state
-       ) do
-    updated_state = retry_failed(state)
-
-    case TortoiseClient.unsubscribe(topic) do
-      {:ok, reference} ->
-        %State{
-          updated_state
-          | pending_unsubscriptions: Map.put(pending_unsubscriptions, reference, topic)
-        }
-
-      {:error, _reason} ->
-        %State{
-          updated_state
-          | failed_unsubscriptions: [topic | failed_unsubscriptions]
-        }
-    end
-  end
-
-  defp publish_mqtt_message(
-         topic,
-         payload,
-         %State{
-           failed_messages: failed_messages,
-           pending_messages: pending_messages
-         } = state
-       ) do
-    updated_state = retry_failed(state)
-
-    case do_publish_message(topic, payload) do
+    case execute_work(cmd) do
       :ok ->
-        state
+        # fire and forget work; Publish with QoS=0 is among the work
+        # that doesn't produce references
+        {:noreply, state, {:continue, :consume_work_list}}
 
-      {:ok, reference} ->
-        Logger.debug(
-          "[Hare] Asked Tortoise to publish #{inspect(topic)} with #{inspect(payload)}. Got #{
-            inspect(reference)
-          }."
-        )
-
-        %State{
-          updated_state
-          | pending_messages:
-              Map.put(pending_messages, reference, %{topic: topic, payload: payload})
-        }
-
-      {:error, reason} ->
-        Logger.warn(
-          "[Hare] Asked Tortoise to publish #{inspect(topic)} with #{inspect(payload)}. Got error #{
-            inspect(reason)
-          }."
-        )
-
-        {:noreply,
-         %State{
-           updated_state
-           | failed_messages: [%{topic: topic, payload: payload} | failed_messages]
-         }}
+      {:ok, ref} ->
+        state = %State{state | pending: Map.put_new(pending, ref, cmd)}
+        {:noreply, state, {:continue, :consume_work_list}}
     end
   end
 
-  defp do_publish_message(topic, payload) when is_list(topic) do
-    topic = Enum.join(topic, "/")
-
-    TortoiseClient.publish(topic, payload)
+  ### PRIVATE HELPERS --------------------------------------------------
+  defp execute_work({:publish, topic, payload, opts}) do
+    TortoiseClient.publish(topic, payload, opts)
   end
 
-  defp do_publish_message(topic, payload) do
-    TortoiseClient.publish(topic, payload)
+  defp execute_work({:subscribe, topic_filter, opts} = subscribe) do
+    TortoiseClient.subscribe(topic_filter, opts)
   end
 
-  defp retry_failed(state) do
-    state
-    |> republish_failed()
-    |> resubscribe_failed()
-    |> reunsubscribe_failed()
-  end
-
-  # Returns updated state
-  defp republish_failed(%State{failed_messages: failed_messages} = state) do
-    Enum.reduce(
-      Enum.reverse(failed_messages),
-      %State{state | failed_messages: []},
-      fn %{topic: topic, payload: payload} = message, acc ->
-        Logger.info("[Hare] Republishing failed message #{inspect(message)}")
-
-        publish_mqtt_message(topic, payload, acc)
-      end
-    )
-  end
-
-  # Returns updated state
-  defp resubscribe_failed(%State{failed_subscriptions: failed_subscriptions} = state) do
-    Enum.reduce(
-      failed_subscriptions,
-      %State{state | failed_subscriptions: []},
-      fn topic, acc ->
-        Logger.info("[Hubbub] Retrying failed subscription #{inspect(topic)}")
-
-        mqtt_subscribe(topic, acc)
-      end
-    )
-  end
-
-  # Returns updated state
-  defp reunsubscribe_failed(%State{failed_unsubscriptions: failed_unsubscriptions} = state) do
-    Enum.reduce(
-      failed_unsubscriptions,
-      %State{state | failed_unsubscriptions: []},
-      fn topic, acc ->
-        Logger.info("[Hare] Retrying failed unsubscription #{inspect(topic)}")
-
-        mqtt_unsubscribe(topic, acc)
-      end
-    )
-  end
-
-  # Returns updated state
-  defp process_publishing_result(
-         reference,
-         result,
-         %State{pending_messages: pending_messages, failed_messages: failed_messages} = state
-       ) do
-    message = Map.fetch!(pending_messages, reference)
-    updated_pending_messages = Map.delete(pending_messages, reference)
-
-    case result do
-      :ok ->
-        Logger.info("[Hare] Message #{inspect(message)} successfully published")
-
-        %State{state | pending_messages: updated_pending_messages}
-
-      {:error, reason} ->
-        Logger.warn("[Hare] Failed to publish #{inspect(message)}: #{inspect(reason)}")
-
-        %State{
-          state
-          | pending_messages: updated_pending_messages,
-            failed_messages: [message | failed_messages]
-        }
-    end
-  end
-
-  # Returns updated state
-  defp process_subscription_result(
-         reference,
-         result,
-         %State{
-           pending_subscriptions: pending_subscriptions,
-           subscriptions: subscriptions,
-           failed_subscriptions: failed_subscriptions
-         } = state
-       ) do
-    topic = Map.fetch!(pending_subscriptions, reference)
-    updated_pending_subscriptions = Map.delete(pending_subscriptions, reference)
-
-    case result do
-      :ok ->
-        Logger.info("[Hare] Subscription to #{inspect(topic)} successful")
-
-        %State{
-          state
-          | pending_subscriptions: updated_pending_subscriptions,
-            subscriptions: Enum.uniq([topic | subscriptions]),
-            failed_subscriptions: List.delete(failed_subscriptions, topic)
-        }
-
-      {:error, reason} ->
-        Logger.warn("[Hare] Subscription to #{inspect(topic)} failed: #{inspect(reason)}")
-
-        %State{
-          state
-          | pending_subscriptions: updated_pending_subscriptions,
-            failed_subscriptions: Enum.uniq([topic | failed_subscriptions])
-        }
-    end
-  end
-
-  # Returns updated state
-  defp process_unsubscription_result(
-         reference,
-         result,
-         %State{
-           pending_unsubscriptions: pending_unsubscriptions,
-           subscriptions: subscriptions,
-           failed_unsubscriptions: failed_unsubscriptions
-         } = state
-       ) do
-    topic = Map.fetch!(pending_unsubscriptions, reference)
-    updated_pending_unsubscriptions = Map.delete(pending_unsubscriptions, reference)
-
-    case result do
-      :ok ->
-        Logger.info("[Hare] Unsubscription to #{inspect(topic)} successful")
-
-        %State{
-          state
-          | pending_unsubscriptions: updated_pending_unsubscriptions,
-            subscriptions: List.delete(subscriptions, topic),
-            failed_unsubscriptions: List.delete(failed_unsubscriptions, topic)
-        }
-
-      {:error, reason} ->
-        Logger.warn("[Hare] Unsubscription to #{inspect(topic)} failed: #{inspect(reason)}")
-
-        %State{
-          state
-          | pending_unsubscriptions: updated_pending_unsubscriptions,
-            failed_unsubscriptions: Enum.uniq([topic | failed_unsubscriptions])
-        }
-    end
+  defp execute_work({:unsubscribe, topic_filter, opts}) do
+    # the unsubscribe does not take any options, but it might do in
+    # the future, keeping it to make future upgrades easier
+    TortoiseClient.unsubscribe(topic_filter, opts)
   end
 
   defp initial_topics() do
