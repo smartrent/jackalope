@@ -25,6 +25,13 @@ defmodule Hare.TortoiseClient do
     GenServer.start_link(__MODULE__, init_args, name: __MODULE__)
   end
 
+  @doc """
+  Tell Tortoise to reconnect
+  """
+  def reconnect() do
+    GenServer.cast(__MODULE__, :reconnect)
+  end
+
   @doc "Publish a message"
   @spec publish(String.t(), map(), opts :: Keyword.t() | non_neg_integer) ::
           :ok | {:ok, reference()} | {:error, atom}
@@ -171,6 +178,13 @@ defmodule Hare.TortoiseClient do
   end
 
   @impl true
+  def handle_cast(:reconnect, %State{} = state) do
+    Tortoise.Connection.disconnect(state.client_id)
+    state = %State{state | connection: nil}
+    {:noreply, state, {:continue, :spawn_connection}}
+  end
+
+  @impl true
   # Tortoise network status changes
   def handle_info(
         {{Tortoise, client_id}, :status, network_status},
@@ -188,6 +202,10 @@ defmodule Hare.TortoiseClient do
 
       :terminating ->
         Logger.info("[Hare] MQTT client is terminating (#{client_id})")
+        {:noreply, state}
+
+      :terminated ->
+        Logger.info("[Hare] MQTT client has terminated (#{client_id})")
         {:noreply, state}
     end
   end
