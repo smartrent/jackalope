@@ -268,6 +268,15 @@ defmodule Hare do
   end
 
   def handle_cast({:cmd, cmd, opts}, %State{work_list: work_list} = state) do
+    # Setup the options for the work order; so far we support time to
+    # live, which allow us to specify the time a work order is allowed
+    # to stay in the work list before it is deemed irrelevant
+    opts =
+      Keyword.update(opts, :ttl, :infinity, fn
+        :infinity -> :infinity
+        ttl when is_integer(ttl) -> System.monotonic_time(:millisecond) + ttl
+      end)
+
     # Note that we don't really concern ourselves with the order of
     # the commands; the worklist is a list (and thus a stack) and when
     # we retry a message it will reenter the work list at the front,
@@ -318,21 +327,28 @@ defmodule Hare do
         :consume_work_list,
         %State{
           connection_status: :online,
-          work_list: [{cmd, _opts} = work_order | remaining],
+          work_list: [{cmd, opts} = work_order | remaining],
           pending: pending
         } = state
       ) do
     state = %State{state | work_list: remaining}
+    ttl = Keyword.get(opts, :ttl, :infinity)
 
-    case execute_work(cmd) do
-      :ok ->
-        # fire and forget work; Publish with QoS=0 is among the work
-        # that doesn't produce references
-        {:noreply, state, {:continue, :consume_work_list}}
+    if ttl > System.monotonic_time(:millisecond) do
+      case execute_work(cmd) do
+        :ok ->
+          # fire and forget work; Publish with QoS=0 is among the work
+          # that doesn't produce references
+          {:noreply, state, {:continue, :consume_work_list}}
 
-      {:ok, ref} ->
-        state = %State{state | pending: Map.put_new(pending, ref, work_order)}
-        {:noreply, state, {:continue, :consume_work_list}}
+        {:ok, ref} ->
+          state = %State{state | pending: Map.put_new(pending, ref, work_order)}
+          {:noreply, state, {:continue, :consume_work_list}}
+      end
+    else
+      # drop the message, it is outside of the time to live
+      Logger.warn("TTL Expired, Message dropped: #{inspect(cmd)}")
+      {:noreply, state, {:continue, :consume_work_list}}
     end
   end
 
