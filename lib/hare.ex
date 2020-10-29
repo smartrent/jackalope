@@ -164,7 +164,32 @@ defmodule Hare do
 
   def handle_cast({:connection_status, status}, state)
       when status in [:down, :terminating, :terminated] do
-    {:noreply, %State{state | connection_status: :offline}}
+    state = %State{
+      state
+      | connection_status: :offline,
+        # Reset the subscriptions and schedule a resubscribe to all
+        # the current subscriptions for when we are back online. Note;
+        # MQTT sessions should be able to handle this, but we do it
+        # for good measure to ensure a consistent state of the world;
+        # an upcoming Tortoise version will track this state in the
+        # connection state, and the user can ask for it, so this
+        # problem will go away in the future; also, as we add the
+        # subscribe work-order at the front of the list, any
+        # ubsubscribe placed should come after this, making sure we
+        # will not resubscribe to a topic we are no longer interested
+        # in.
+        subscriptions: %{},
+        work_list:
+          Enum.concat([
+            for(
+              {topic_filter, opts} <- state.subscriptions,
+              do: {:subscribe, topic_filter, opts}
+            ),
+            state.work_list
+          ])
+    }
+
+    {:noreply, state}
   end
 
   # Handle responses to user initiated commands; subscribe,
@@ -231,23 +256,13 @@ defmodule Hare do
     state = %State{
       state
       | connection_status: :offline,
-        # reset the subscriptions and resubscribe to all the current
-        # subscriptions. Note; MQTT sessions should be able to handle
-        # this, but we do it for good measure to ensure a consistent
-        # state of the world; an upcoming Tortoise version will track
-        # this state in the connection state, and the user can ask for
-        # it, so this problem will go away in the future; we will also
-        # republish all the messages we got in pending; this might
-        # result in messages being sent twice, but this is already an
-        # issue with QoS=1 messages
-        subscriptions: %{},
+        # We will republish all the messages we got in pending; this
+        # might result in messages being received twice, but this is
+        # already an issue with QoS=1 messages; subscribes and
+        # unsubscribes should be idempotent
         pending: %{},
         work_list:
           Enum.concat([
-            for(
-              {topic_filter, opts} <- state.subscriptions,
-              do: {:subscribe, topic_filter, opts}
-            ),
             for(
               {ref, cmd} when is_reference(ref) <- state.pending,
               do: cmd
