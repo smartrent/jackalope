@@ -55,28 +55,55 @@ defmodule Hare do
   end
 
   ## MQTT-ing
-  def subscribe(topic_filter, opts \\ []) do
-    cmd = {:subscribe, topic_filter, opts}
-    GenServer.cast(__MODULE__, {:cmd, cmd})
+  @doc """
+  Subscribe to a topic filter on the MQTT server
+  """
+  def subscribe(subscription, opts \\ [])
+
+  def subscribe({topic_filter, subscribe_opts}, opts) do
+    cmd = {:subscribe, topic_filter, subscribe_opts}
+    GenServer.cast(__MODULE__, {:cmd, cmd, opts})
   end
 
-  def unsubscribe(topic_filter, opts \\ []) do
-    cmd = {:unsubscribe, topic_filter, opts}
-    GenServer.cast(__MODULE__, {:cmd, cmd})
+  def subscribe(topic_filter, opts) do
+    # lift the input to the correct format
+    subscribe({topic_filter, []}, opts)
   end
 
-  @doc "Publish an MQTT message"
-  @spec publish([Tortoise.topic()], map(), opts :: Keyword.t()) :: :ok
-  def publish(topic, payload, opts \\ [])
+  @doc """
+  Unsubscribe from a topic filter on the MQTT server
+  """
+  def unsubscribe(ubsubscribe, opts \\ [])
 
-  def publish(topic, payload, opts) when is_list(topic) do
+  def unsubscribe({topic_filter, unsubscribe_opts}, opts) do
+    cmd = {:unsubscribe, topic_filter, unsubscribe_opts}
+    GenServer.cast(__MODULE__, {:cmd, cmd, opts})
+  end
+
+  def unsubscribe(topic_filter, opts) do
+    # lift the input to the correct format
+    unsubscribe({topic_filter, []}, opts)
+  end
+
+  @doc """
+  Publish an MQTT message
+  """
+  def publish(topic_and_opts, payload, opts \\ [])
+
+  def publish({topic, publish_opts}, payload, opts) when is_list(topic) do
+    # normalize the topic list, should be a string
     topic = Enum.join(topic, "/")
-    publish(topic, payload, opts)
+    publish({topic, publish_opts}, payload, opts)
   end
 
-  def publish(topic, payload, opts) do
-    cmd = {:publish, topic, payload, opts}
-    GenServer.cast(__MODULE__, {:cmd, cmd})
+  def publish(topic, payload, opts) when not is_tuple(topic) do
+    # normalize the topic to include the publish opts
+    publish({topic, []}, payload, opts)
+  end
+
+  def publish({topic, publish_opts}, payload, opts) do
+    cmd = {:publish, topic, payload, publish_opts}
+    GenServer.cast(__MODULE__, {:cmd, cmd, opts})
   end
 
   ## Testing
@@ -145,7 +172,7 @@ defmodule Hare do
     # Produce subscription commands for the initial subscriptions
     work_list =
       for topic_filter <- initial_topics(),
-          do: {:subscribe, topic_filter, []}
+          do: {{:subscribe, topic_filter, []}, []}
 
     {:ok, %State{work_list: work_list}, {:continue, :consume_work_list}}
   end
@@ -183,7 +210,7 @@ defmodule Hare do
           Enum.concat([
             for(
               {topic_filter, opts} <- state.subscriptions,
-              do: {:subscribe, topic_filter, opts}
+              do: {{:subscribe, topic_filter, opts}, []}
             ),
             state.work_list
           ])
@@ -198,17 +225,17 @@ defmodule Hare do
         {:tortoise_result, _client_id, ref, res},
         %State{pending: pending} = state
       ) do
-    {cmd, pending} = Map.pop(pending, ref)
+    {work_order, pending} = Map.pop(pending, ref)
     state = %State{state | pending: pending}
 
     case res do
-      _unknown_ref when is_nil(cmd) ->
+      _unknown_ref when is_nil(work_order) ->
         Logger.info("Received unknown ref from Tortoise: #{inspect(ref)}")
         {:noreply, state}
 
       :ok ->
-        case cmd do
-          {:subscribe, topic, opts} ->
+        case work_order do
+          {{:subscribe, topic, subscription_opts}, _opts} ->
             # Note that all subscriptions has to go through Hare; for
             # that reason we cannot use the "initial subscriptions" in
             # Tortoise, as Hare would not know about them; the
@@ -216,12 +243,12 @@ defmodule Hare do
             # subscriptions state!
             state = %State{
               state
-              | subscriptions: Map.put(state.subscriptions, topic, opts)
+              | subscriptions: Map.put(state.subscriptions, topic, subscription_opts)
             }
 
             {:noreply, state}
 
-          {:unsubscribe, topic, _opts} ->
+          {{:unsubscribe, topic, _}, _opts} ->
             state = %State{
               state
               | subscriptions: Map.delete(state.subscriptions, topic)
@@ -235,17 +262,26 @@ defmodule Hare do
 
       {:error, reason} ->
         Logger.warn("Retrying message, failed with reason: #{inspect(reason)}")
-        state = %State{state | work_list: [cmd | state.work_list]}
+        state = %State{state | work_list: [work_order | state.work_list]}
         {:noreply, state}
     end
   end
 
-  def handle_cast({:cmd, cmd}, %State{work_list: work_list} = state) do
+  def handle_cast({:cmd, cmd, opts}, %State{work_list: work_list} = state) do
+    # Setup the options for the work order; so far we support time to
+    # live, which allow us to specify the time a work order is allowed
+    # to stay in the work list before it is deemed irrelevant
+    opts =
+      Keyword.update(opts, :ttl, :infinity, fn
+        :infinity -> :infinity
+        ttl when is_integer(ttl) -> System.monotonic_time(:millisecond) + ttl
+      end)
+
     # Note that we don't really concern ourselves with the order of
     # the commands; the worklist is a list (and thus a stack) and when
     # we retry a message it will reenter the work list at the front,
     # and it could already have messages, etc.
-    work_list = [cmd | work_list]
+    work_list = [{cmd, opts} | work_list]
     state = %State{state | work_list: work_list}
     {:noreply, state, {:continue, :consume_work_list}}
   end
@@ -264,8 +300,8 @@ defmodule Hare do
         work_list:
           Enum.concat([
             for(
-              {ref, cmd} when is_reference(ref) <- state.pending,
-              do: cmd
+              {ref, work_order} when is_reference(ref) <- state.pending,
+              do: work_order
             ),
             state.work_list
           ])
@@ -291,21 +327,28 @@ defmodule Hare do
         :consume_work_list,
         %State{
           connection_status: :online,
-          work_list: [cmd | remaining],
+          work_list: [{cmd, opts} = work_order | remaining],
           pending: pending
         } = state
       ) do
     state = %State{state | work_list: remaining}
+    ttl = Keyword.get(opts, :ttl, :infinity)
 
-    case execute_work(cmd) do
-      :ok ->
-        # fire and forget work; Publish with QoS=0 is among the work
-        # that doesn't produce references
-        {:noreply, state, {:continue, :consume_work_list}}
+    if ttl > System.monotonic_time(:millisecond) do
+      case execute_work(cmd) do
+        :ok ->
+          # fire and forget work; Publish with QoS=0 is among the work
+          # that doesn't produce references
+          {:noreply, state, {:continue, :consume_work_list}}
 
-      {:ok, ref} ->
-        state = %State{state | pending: Map.put_new(pending, ref, cmd)}
-        {:noreply, state, {:continue, :consume_work_list}}
+        {:ok, ref} ->
+          state = %State{state | pending: Map.put_new(pending, ref, work_order)}
+          {:noreply, state, {:continue, :consume_work_list}}
+      end
+    else
+      # drop the message, it is outside of the time to live
+      Logger.warn("TTL Expired, Message dropped: #{inspect(cmd)}")
+      {:noreply, state, {:continue, :consume_work_list}}
     end
   end
 
