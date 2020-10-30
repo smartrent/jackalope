@@ -10,6 +10,7 @@ defmodule Hare.TortoiseClient do
 
   defmodule State do
     defstruct connection: nil,
+              hare_pid: nil,
               app_handler: nil,
               client_id: nil,
               connection_options: [],
@@ -81,12 +82,15 @@ defmodule Hare.TortoiseClient do
 
   @impl true
   def init(opts) do
-    case struct(State, opts) do
+    case struct(%State{hare_pid: Hare.whereis()}, opts) do
       %State{client_id: nil} ->
         {:stop, :missing_client_id}
 
       %State{app_handler: nil} ->
         {:stop, :missing_app_handler}
+
+      %State{hare_pid: pid} when not is_pid(pid) ->
+        {:stop, :missing_hare_process}
 
       %State{} = initial_state ->
         {:ok, initial_state, {:continue, :spawn_connection}}
@@ -191,12 +195,11 @@ defmodule Hare.TortoiseClient do
   # Tortoise network status changes
   def handle_info(
         {{Tortoise, client_id}, :status, network_status},
-        %State{client_id: client_id, app_handler: app_handler} = state
+        %State{client_id: client_id} = state
       ) do
     case network_status do
       :up ->
         Logger.info("[Hare] MQTT client is online (#{client_id})")
-        apply(app_handler, :connection_status, [:up])
         {:noreply, state}
 
       :down ->
@@ -213,14 +216,15 @@ defmodule Hare.TortoiseClient do
     end
   end
 
-  # result is :ok or {:error, reason}
-  # reference is known from prior publish, subscribe or unsubscribe
+  # Send the result to the Hare process; the Hare process will keep
+  # track of the references, and it knowns about the type of
+  # message--publish, subscribe, or unsubscribe--that the reference
+  # relates to.
   def handle_info(
-        {{Tortoise, client_id}, reference, result},
-        %State{app_handler: app_handler} = state
+        {{Tortoise, _client_id}, reference, result},
+        %State{} = state
       ) do
-    apply(app_handler, :tortoise_result, [client_id, reference, result])
-
+    send state.hare_pid, {:tortoise_result, reference, result}
     {:noreply, state}
   end
 

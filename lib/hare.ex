@@ -122,17 +122,6 @@ defmodule Hare do
   ### AppHandler callbacks
 
   @impl true
-  def tortoise_result(client_id, reference, result) do
-    Logger.info(
-      "[Hare] Tortoise result for client #{inspect(client_id)} referenced by #{inspect(reference)} is #{
-        inspect(result)
-      }"
-    )
-
-    GenServer.cast(__MODULE__, {:tortoise_result, client_id, reference, result})
-  end
-
-  @impl true
   def message_received(topic, payload) do
     Logger.info(
       "[Hare] Tortoise received message with topic #{inspect(topic)} and payload #{
@@ -208,11 +197,10 @@ defmodule Hare do
     {:noreply, state}
   end
 
-  @impl true
   # Handle responses to user initiated commands; subscribe,
   # unsubscribe, publish...
-  def handle_cast(
-        {:tortoise_result, _client_id, ref, res},
+  def handle_info(
+        {:tortoise_result, ref, res},
         %State{pending: pending} = state
       ) do
     {work_order, pending} = Map.pop(pending, ref)
@@ -257,6 +245,7 @@ defmodule Hare do
     end
   end
 
+  @impl true
   def handle_cast({:cmd, cmd, opts}, %State{work_list: work_list} = state) do
     # Setup the options for the work order; so far we support time to
     # live, which allow us to specify the time a work order is allowed
