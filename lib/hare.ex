@@ -133,15 +133,6 @@ defmodule Hare do
   end
 
   @impl true
-  def subscription(status, topic) do
-    Logger.info(
-      "[Hare] Subscription #{inspect(status)} for topic #{inspect(topic)} was requested"
-    )
-
-    :ok
-  end
-
-  @impl true
   def message_received(topic, payload) do
     Logger.info(
       "[Hare] Tortoise received message with topic #{inspect(topic)} and payload #{

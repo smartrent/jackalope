@@ -23,13 +23,9 @@ defmodule Hare.TortoiseHandler do
     {:ok, state}
   end
 
-  def subscription(:up, topic, %State{} = state) do
-    apply(state.app_handler, :subscription, [:up, topic])
-    {:ok, state}
-  end
-
-  def subscription(:down, topic, %State{} = state) do
-    apply(state.app_handler, :subscription, [:down, topic])
+  def subscription(status, _topic, %State{} = state) when status in [:up, :down] do
+    # We will track the subscription status in Hare by observing the
+    # responses to subscribe and unsubscribe messages
     {:ok, state}
   end
 
