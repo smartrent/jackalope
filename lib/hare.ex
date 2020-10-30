@@ -30,6 +30,10 @@ defmodule Hare do
     GenServer.start_link(__MODULE__, nil, name: __MODULE__)
   end
 
+  def whereis() do
+    GenServer.whereis(__MODULE__)
+  end
+
   ## Configuration support
 
   @spec client_id() :: String.t()

@@ -5,13 +5,14 @@ defmodule Hare.TortoiseHandler do
 
   alias __MODULE__, as: State
 
-  defstruct app_handler: nil
+  defstruct app_handler: nil, hare_pid: nil
 
   ### CALLBACKS from Tortoise
 
   def init(opts) do
     initial_state = %State{
-      app_handler: Keyword.fetch!(opts, :app_handler)
+      app_handler: Keyword.fetch!(opts, :app_handler),
+      hare_pid: Hare.whereis()
     }
 
     {:ok, initial_state}
