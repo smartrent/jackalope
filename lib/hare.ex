@@ -122,12 +122,6 @@ defmodule Hare do
   ### AppHandler callbacks
 
   @impl true
-  def connection_status(status) do
-    Logger.info("[Hare] Tortoise connection is #{inspect(status)}")
-    GenServer.cast(__MODULE__, {:connection_status, status})
-  end
-
-  @impl true
   def tortoise_result(client_id, reference, result) do
     Logger.info(
       "[Hare] Tortoise result for client #{inspect(client_id)} referenced by #{inspect(reference)} is #{
@@ -188,12 +182,12 @@ defmodule Hare do
 
   @impl true
   # Connection status changes
-  def handle_cast({:connection_status, :up}, state) do
+  def handle_info({:connection_status, :up}, state) do
     state = %State{state | connection_status: :online}
     {:noreply, state, {:continue, :consume_work_list}}
   end
 
-  def handle_cast({:connection_status, status}, state)
+  def handle_info({:connection_status, status}, state)
       when status in [:down, :terminating, :terminated] do
     state = %State{
       state
@@ -223,6 +217,7 @@ defmodule Hare do
     {:noreply, state}
   end
 
+  @impl true
   # Handle responses to user initiated commands; subscribe,
   # unsubscribe, publish...
   def handle_cast(

@@ -3,7 +3,6 @@ defmodule Hare.AppHandler do
 
   @type client_id :: String.t()
 
-  @callback connection_status(:up | :down) :: :ok
   @callback tortoise_result(client_id, reference(), :ok | {:error, atom}) :: :ok
   @callback subscription(:up | :down, Tortoise.topic_filter()) :: :ok
   @callback message_received(Tortoise.topic_filter(), String.t()) :: :ok
