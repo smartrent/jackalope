@@ -10,7 +10,7 @@ defmodule Hare.TortoiseClient do
 
   defmodule State do
     defstruct connection: nil,
-              app_handler: Hare.DefaultAppHandler,
+              app_handler: nil,
               client_id: nil,
               connection_options: [],
               publish_timeout: 30_000,
@@ -84,6 +84,9 @@ defmodule Hare.TortoiseClient do
     case struct(State, opts) do
       %State{client_id: nil} ->
         {:stop, :missing_client_id}
+
+      %State{app_handler: nil} ->
+        {:stop, :missing_app_handler}
 
       %State{} = initial_state ->
         {:ok, initial_state, {:continue, :spawn_connection}}
