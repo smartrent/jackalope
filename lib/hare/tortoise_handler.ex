@@ -3,33 +3,36 @@ defmodule Hare.TortoiseHandler do
   @behaviour Tortoise.Handler
   require Logger
 
+  alias __MODULE__, as: State
+
+  defstruct app_handler: nil
+
   ### CALLBACKS from Tortoise
 
   def init(opts) do
-    {:ok, opts}
+    initial_state = %State{
+      app_handler: Keyword.fetch!(opts, :app_handler)
+    }
+
+    {:ok, initial_state}
   end
 
-  def connection(conn_status, state) do
-    app_handler = Keyword.fetch!(state, :app_handler)
-    apply(app_handler, :connection_status, [conn_status])
+  def connection(conn_status, %State{} = state) do
+    apply(state.app_handler, :connection_status, [conn_status])
     {:ok, state}
   end
 
-  def subscription(:up, topic, state) do
-    app_handler = Keyword.fetch!(state, :app_handler)
-    apply(app_handler, :subscription, [:up, topic])
+  def subscription(:up, topic, %State{} = state) do
+    apply(state.app_handler, :subscription, [:up, topic])
     {:ok, state}
   end
 
-  def subscription(:down, topic, state) do
-    app_handler = Keyword.fetch!(state, :app_handler)
-    apply(app_handler, :subscription, [:down, topic])
+  def subscription(:down, topic, %State{} = state) do
+    apply(state.app_handler, :subscription, [:down, topic])
     {:ok, state}
   end
 
-  def handle_message(topic, payload_string, state) do
-    app_handler = Keyword.fetch!(state, :app_handler)
-
+  def handle_message(topic, payload_string, %State{app_handler: app_handler} = state) do
     case Jason.decode(payload_string) do
       {:ok, payload} ->
         apply(app_handler, :message_received, [topic, payload])
