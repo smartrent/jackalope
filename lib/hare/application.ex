@@ -1,6 +1,4 @@
 defmodule Hare.Application do
-  # See https://hexdocs.pm/elixir/Application.html
-  # for more information on OTP Applications
   @moduledoc false
 
   use Application
@@ -16,9 +14,13 @@ defmodule Hare.Application do
        ]}
     ]
 
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: Hare.TopSupervisor]
+    # Supervision strategy is rest for one, as a crash in Hare would
+    # result in inconsistent state in Hare; we would not be able to
+    # know about the subscription state; so we teardown the tortoise
+    # if Hare crash. Should the Hare.Supervisor crash, Hare should
+    # resubscribe to the topic filters it currently know about, so
+    # that should be okay.
+    opts = [strategy: :rest_for_one, name: Hare.TopSupervisor]
     Supervisor.start_link(children, opts)
   end
 end
