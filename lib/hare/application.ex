@@ -4,8 +4,10 @@ defmodule Hare.Application do
   use Application
 
   def start(_type, _args) do
+    initial_topics = Application.get_env(:hare, :base_topics, [])
+
     children = [
-      Hare,
+      {Hare, [initial_topics: initial_topics]},
       {Hare.Supervisor,
        [
          app_handler: Hare,

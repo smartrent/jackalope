@@ -23,9 +23,9 @@ defmodule Hare do
             pending: %{},
             subscriptions: %{}
 
-  def start_link(_) do
+  def start_link(opts) do
     Logger.info("[Hare] Starting #{inspect(__MODULE__)}...")
-    GenServer.start_link(__MODULE__, nil, name: __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   def whereis() do
@@ -120,9 +120,9 @@ defmodule Hare do
   ### GenServer callbacks
 
   @impl true
-  def init(_) do
+  def init(opts) do
     # Produce subscription commands for the initial subscriptions
-    initial_topics = Application.get_env(:hare, :base_topics, [])
+    initial_topics = Keyword.get(opts, :initial_topics, [])
 
     work_list =
       for topic_filter <- initial_topics,
