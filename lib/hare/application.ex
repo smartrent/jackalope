@@ -39,7 +39,6 @@ defmodule Hare.Application do
         qos: 1,
         retain: false
       },
-      # Subcriptions are set after all devices inclusions are recovered
       backoff: [min_interval: 100, max_interval: 30_000]
     ]
   end
