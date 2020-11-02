@@ -18,8 +18,6 @@ defmodule Hare do
   alias __MODULE__, as: State
   alias Hare.TortoiseClient
 
-  @qos 1
-
   defstruct connection_status: :offline,
             work_list: [],
             pending: %{},
@@ -32,30 +30,6 @@ defmodule Hare do
 
   def whereis() do
     GenServer.whereis(__MODULE__)
-  end
-
-  ## Configuration support
-
-  @spec client_id() :: String.t()
-  def client_id(), do: Application.get_env(:hare, :client_id)
-
-  @spec connection_options() :: Keyword.t()
-  def connection_options() do
-    [
-      server: {
-        Tortoise.Transport.Tcp,
-        host: mqtt_host(), port: mqtt_port()
-      },
-      will: %Tortoise.Package.Publish{
-        topic: "#{client_id()}/message",
-        payload: "last will",
-        dup: false,
-        qos: @qos,
-        retain: false
-      },
-      # Subcriptions are set after all devices inclusions are recovered
-      backoff: [min_interval: 100, max_interval: 30_000]
-    ]
   end
 
   ## MQTT-ing
@@ -148,8 +122,10 @@ defmodule Hare do
   @impl true
   def init(_) do
     # Produce subscription commands for the initial subscriptions
+    initial_topics = Application.get_env(:hare, :base_topics, [])
+
     work_list =
-      for topic_filter <- initial_topics(),
+      for topic_filter <- initial_topics,
           do: {{:subscribe, topic_filter, []}, []}
 
     {:ok, %State{work_list: work_list}, {:continue, :consume_work_list}}
@@ -345,11 +321,4 @@ defmodule Hare do
     # the future, keeping it to make future upgrades easier
     TortoiseClient.unsubscribe(topic_filter, opts)
   end
-
-  defp initial_topics() do
-    Application.get_env(:hare, :base_topics, [])
-  end
-
-  defp mqtt_host(), do: Application.get_env(:hare, :mqtt_host)
-  defp mqtt_port(), do: Application.get_env(:hare, :mqtt_port)
 end

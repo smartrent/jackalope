@@ -19,7 +19,7 @@ defmodule Hare.TortoiseHandler do
   end
 
   def connection(status, %State{} = state) do
-    send state.hare_pid, {:connection_status, status}
+    send(state.hare_pid, {:connection_status, status})
     {:ok, state}
   end
 

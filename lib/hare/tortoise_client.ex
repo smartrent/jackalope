@@ -224,7 +224,7 @@ defmodule Hare.TortoiseClient do
         {{Tortoise, _client_id}, reference, result},
         %State{} = state
       ) do
-    send state.hare_pid, {:tortoise_result, reference, result}
+    send(state.hare_pid, {:tortoise_result, reference, result})
     {:noreply, state}
   end
 
