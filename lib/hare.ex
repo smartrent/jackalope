@@ -81,7 +81,18 @@ defmodule Hare do
 
   def publish({topic, publish_opts}, payload, opts) do
     cmd = {:publish, topic, payload, publish_opts}
-    GenServer.cast(__MODULE__, {:cmd, cmd, opts})
+
+    # Ensure the opts passed to the publish are allowed by AWS IoT
+    cond do
+      not (Keyword.get(publish_opts, :qos, 0) in [0, 1]) ->
+        {:error, :unsupported_qos}
+
+      Keyword.get(publish_opts, :retain, false) == true ->
+        {:error, :retain_not_supported}
+
+      _opts_looks_good! = true ->
+        GenServer.cast(__MODULE__, {:cmd, cmd, opts})
+    end
   end
 
   ## Testing
