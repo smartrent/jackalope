@@ -94,32 +94,6 @@ defmodule Hare do
     GenServer.cast(__MODULE__, :reconnect)
   end
 
-  ### AppHandler callbacks
-
-  @impl true
-  def message_received(topic, payload) do
-    Logger.info(
-      "[Hare] Tortoise received message with topic #{inspect(topic)} and payload #{
-        inspect(payload)
-      }"
-    )
-
-    :ok
-  end
-
-  @impl true
-  def invalid_payload(topic, payload) do
-    Logger.info(
-      "[Hare] Tortoise received an invalid message with topic #{inspect(topic)} and payload #{
-        inspect(payload)
-      }"
-    )
-
-    :ok
-  end
-
-  ### GenServer callbacks
-
   @impl true
   def init(opts) do
     handler = Keyword.fetch!(opts, :handler)
