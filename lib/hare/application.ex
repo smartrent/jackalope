@@ -8,7 +8,7 @@ defmodule Hare.Application do
     hare_handler = Application.get_env(:hare, :handler, Hare.Handler.Logger)
 
     children = [
-      {Hare, [initial_topics: initial_topics]},
+      {Hare, [initial_topics: initial_topics, handler: hare_handler]},
       {Hare.Supervisor,
        [
          handler: hare_handler,

@@ -19,6 +19,7 @@ defmodule Hare do
   alias Hare.TortoiseClient
 
   defstruct connection_status: :offline,
+            handler: nil,
             work_list: [],
             pending: %{},
             subscriptions: %{}
@@ -121,6 +122,7 @@ defmodule Hare do
 
   @impl true
   def init(opts) do
+    handler = Keyword.fetch!(opts, :handler)
     # Produce subscription commands for the initial subscriptions
     initial_topics = Keyword.get(opts, :initial_topics, [])
 
@@ -282,6 +284,7 @@ defmodule Hare do
         :consume_work_list,
         %State{
           connection_status: :online,
+          handler: handler,
           work_list: [{cmd, opts} = work_order | remaining],
           pending: pending
         } = state
@@ -305,7 +308,11 @@ defmodule Hare do
       end
     else
       # drop the message, it is outside of the time to live
-      Logger.warn("TTL Expired, Message dropped: #{inspect(cmd)}")
+      if function_exported?(state.handler, :handle_error, 1) do
+        reason = {:publish_error, cmd, :ttl_expired}
+        apply(state.handler, :handle_error, [reason])
+      end
+
       {:noreply, state, {:continue, :consume_work_list}}
     end
   end

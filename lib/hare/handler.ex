@@ -1,6 +1,6 @@
 defmodule Hare.Handler do
   @moduledoc """
-  Callback
+  Behaviour defining callbacks trigged during the life-cycle of Hare
 
   The hare handler is stateless, so if state is needed one could route
   the messages to stateful processes, and inform the system about
@@ -49,7 +49,8 @@ defmodule Hare.Handler do
   @callback handle_error(reason) :: any()
             when reason:
                    {:payload_decode_error, {topic, payload_string :: String.t()}}
-                   | {:publish_error, {topic, payload, opts}, error_reason :: term},
+                   | {:publish_error, {topic, payload, opts}, error_reason :: term}
+                   | {:publish_error, hare_work_order :: term, :ttl_expired},
                  opts: Keyword.t()
 
   @optional_callbacks connection: 1,
