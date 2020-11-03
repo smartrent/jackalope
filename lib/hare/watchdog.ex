@@ -1,4 +1,4 @@
-defmodule Hare.Watchdog do
+defmodule Jackalope.Watchdog do
   @moduledoc "Keeps a heartbeat on the Tortoise connection and crashes if Tortoise becomes unresponsive."
 
   use GenServer
@@ -25,7 +25,7 @@ defmodule Hare.Watchdog do
   end
 
   def start_link(opts) do
-    Logger.info("[Hare] Starting Tortoise watchdog")
+    Logger.info("[Jackalope] Starting Tortoise watchdog")
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
@@ -69,7 +69,9 @@ defmodule Hare.Watchdog do
       :exit, reason ->
         # Crash if the ping message was apparently not handled by Tortoise.Connection,
         # indicating that the processing of its message queue is somehow suspended
-        Logger.warn("[Hare] Watchdog - Tortoise.Connection is unresponsive: #{inspect(reason)}")
+        Logger.warn(
+          "[Jackalope] Watchdog - Tortoise.Connection is unresponsive: #{inspect(reason)}"
+        )
 
         raise "CRASH!"
     end
@@ -78,11 +80,11 @@ defmodule Hare.Watchdog do
   defp ping_tortoise(client_id, timeout) do
     case Tortoise.Connection.ping_sync(client_id, timeout) do
       {:ok, _latency} ->
-        Logger.info("[Hare] Watchdog - Connection to MQTT broker is alive")
+        Logger.info("[Jackalope] Watchdog - Connection to MQTT broker is alive")
         :ok
 
       {:error, reason} ->
-        Logger.warn("[Hare] Watchdog - Connection failed to ping MQTT broker: #{reason}")
+        Logger.warn("[Jackalope] Watchdog - Connection failed to ping MQTT broker: #{reason}")
         {:error, reason}
     end
   end

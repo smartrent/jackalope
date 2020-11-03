@@ -1,33 +1,33 @@
-defmodule Hare.Application do
+defmodule Jackalope.Application do
   @moduledoc false
 
   use Application
 
   def start(_type, _args) do
-    initial_topics = Application.get_env(:hare, :base_topics, [])
-    hare_handler = Application.get_env(:hare, :handler, Hare.Handler.Logger)
+    initial_topics = Application.get_env(:jackalope, :base_topics, [])
+    jackalope_handler = Application.get_env(:jackalope, :handler, Jackalope.Handler.Logger)
 
     children = [
-      {Hare, [initial_topics: initial_topics, handler: hare_handler]},
-      {Hare.Supervisor,
+      {Jackalope, [initial_topics: initial_topics, handler: jackalope_handler]},
+      {Jackalope.Supervisor,
        [
-         handler: hare_handler,
+         handler: jackalope_handler,
          client_id: client_id(),
          connection_options: connection_options()
        ]}
     ]
 
-    # Supervision strategy is rest for one, as a crash in Hare would
-    # result in inconsistent state in Hare; we would not be able to
-    # know about the subscription state; so we teardown the tortoise
-    # if Hare crash. Should the Hare.Supervisor crash, Hare should
-    # resubscribe to the topic filters it currently know about, so
-    # that should be okay.
-    opts = [strategy: :rest_for_one, name: Hare.TopSupervisor]
+    # Supervision strategy is rest for one, as a crash in Jackalope
+    # would result in inconsistent state in Jackalope; we would not be
+    # able to know about the subscription state; so we teardown the
+    # tortoise if Jackalope crash. Should the Jackalope.Supervisor
+    # crash, Jackalope should resubscribe to the topic filters it
+    # currently know about, so that should be okay.
+    opts = [strategy: :rest_for_one, name: Jackalope.TopSupervisor]
     Supervisor.start_link(children, opts)
   end
 
-  defp client_id(), do: Application.get_env(:hare, :client_id)
+  defp client_id(), do: Application.get_env(:jackalope, :client_id)
 
   defp connection_options() do
     [
@@ -46,6 +46,6 @@ defmodule Hare.Application do
     ]
   end
 
-  defp mqtt_host(), do: Application.get_env(:hare, :mqtt_host)
-  defp mqtt_port(), do: Application.get_env(:hare, :mqtt_port)
+  defp mqtt_host(), do: Application.get_env(:jackalope, :mqtt_host)
+  defp mqtt_port(), do: Application.get_env(:jackalope, :mqtt_port)
 end

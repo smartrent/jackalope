@@ -1,4 +1,4 @@
-defmodule Hare.TortoiseHandler do
+defmodule Jackalope.TortoiseHandler do
   @moduledoc false
 
   @behaviour Tortoise.Handler
@@ -7,13 +7,13 @@ defmodule Hare.TortoiseHandler do
 
   alias __MODULE__, as: State
 
-  defstruct hare_pid: nil, handler: nil
+  defstruct jackalope_pid: nil, handler: nil
 
   @impl true
   def init(opts) do
     initial_state = %State{
       handler: Keyword.fetch!(opts, :handler),
-      hare_pid: Hare.whereis()
+      jackalope_pid: Jackalope.whereis()
     }
 
     {:ok, initial_state}
@@ -21,8 +21,8 @@ defmodule Hare.TortoiseHandler do
 
   @impl true
   def connection(status, %State{} = state) do
-    # inform the hare process about the connection status change
-    send(state.hare_pid, {:connection_status, status})
+    # inform the jackalope process about the connection status change
+    send(state.jackalope_pid, {:connection_status, status})
 
     if function_exported?(state.handler, :connection, 1) do
       _ignored = apply(state.handler, :connection, [status])
@@ -37,9 +37,9 @@ defmodule Hare.TortoiseHandler do
       _ignored = apply(state.handler, :subscription, [status, topic_filter])
     end
 
-    # Hare itself will track the subscription status by observing the
-    # responses to subscribe and unsubscribe messages, so we don't
-    # need to send a message to hare here.
+    # Jackalope itself will track the subscription status by observing
+    # the responses to subscribe and unsubscribe messages, so we don't
+    # need to send a message to jackalope here.
     {:ok, state}
   end
 
@@ -47,12 +47,12 @@ defmodule Hare.TortoiseHandler do
   def handle_message(topic, payload_string, %State{handler: handler} = state) do
     case Jason.decode(payload_string) do
       {:ok, payload} ->
-        # Dispatch to the handle message callback on the hare handler
+        # Dispatch to the handle message callback on the jackalope handler
         apply(handler, :handle_message, [topic, payload])
         {:ok, state}
 
       {:error, _reason} ->
-        # Dispatch to the handle error callback on the hare handler if
+        # Dispatch to the handle error callback on the jackalope handler if
         # implemented
         if function_exported?(handler, :handle_error, 1) do
           reason = {:payload_decode_error, {topic, payload_string}}
@@ -65,7 +65,7 @@ defmodule Hare.TortoiseHandler do
 
   @impl true
   def terminate(_some_reason, _state) do
-    Logger.info("[Hare] Tortoise reports termination")
+    Logger.info("[Jackalope] Tortoise reports termination")
     :ok
   end
 end

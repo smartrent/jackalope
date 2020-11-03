@@ -1,8 +1,8 @@
-defmodule HareTest do
+defmodule JackalopeTest do
   use ExUnit.Case
-  doctest Hare
+  doctest Jackalope
 
   test "greets the world" do
-    assert Hare.hello() == :world
+    assert Jackalope.hello() == :world
   end
 end

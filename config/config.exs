@@ -5,8 +5,8 @@
 # is restricted to this project.
 import Config
 
-config :hare,
-  client_id: "hare",
+config :jackalope,
+  client_id: "jackalope",
   mqtt_host: "localhost",
   mqtt_port: 1883,
   base_topics: ~w(testing)

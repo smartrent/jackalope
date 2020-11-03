@@ -1,9 +1,9 @@
-defmodule Hare.Supervisor do
+defmodule Jackalope.Supervisor do
   @moduledoc "A supervisor for all things MQTT"
 
   use Supervisor
   require Logger
-  alias Hare.{Watchdog, TortoiseClient}
+  alias Jackalope.{Watchdog, TortoiseClient}
 
   @type init_arg ::
           {:app_handler, module()} | {:client_id, atom()} | {:connection_options, Keyword.t()}
@@ -14,7 +14,7 @@ defmodule Hare.Supervisor do
   end
 
   def init(init_args) do
-    Logger.info("[Hare] Starting supervisor")
+    Logger.info("[Jackalope] Starting supervisor")
 
     children = [
       # The Tortoise connection supervisor

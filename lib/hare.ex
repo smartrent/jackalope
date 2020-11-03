@@ -1,10 +1,10 @@
-defmodule Hare do
+defmodule Jackalope do
   @moduledoc """
   MQTT application logic
 
-  The Hare module will serve as a message box, tracking the status of
-  the messages currently handled by Tortoise. This part of the
-  application is not supervised in the same supervision branch as
+  The Jackalope module will serve as a message box, tracking the
+  status of the messages currently handled by Tortoise. This part of
+  the application is not supervised in the same supervision branch as
   Tortoise, so we shouldn't drop important messages if Tortoise, or
   any of its siblings should crash; and we should retry messages that
   was not delivered for whatever reason.
@@ -15,7 +15,7 @@ defmodule Hare do
   require Logger
 
   alias __MODULE__, as: State
-  alias Hare.TortoiseClient
+  alias Jackalope.TortoiseClient
 
   defstruct connection_status: :offline,
             handler: nil,
@@ -24,7 +24,7 @@ defmodule Hare do
             subscriptions: %{}
 
   def start_link(opts) do
-    Logger.info("[Hare] Starting #{inspect(__MODULE__)}...")
+    Logger.info("[Jackalope] Starting #{inspect(__MODULE__)}...")
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
@@ -185,11 +185,11 @@ defmodule Hare do
       :ok ->
         case work_order do
           {{:subscribe, topic, subscription_opts}, _opts} ->
-            # Note that all subscriptions has to go through Hare; for
-            # that reason we cannot use the "initial subscriptions" in
-            # Tortoise, as Hare would not know about them; the
-            # upcoming Tortoise will expose a function for the
-            # subscriptions state!
+            # Note that all subscriptions has to go through Jackalope;
+            # for that reason we cannot use the "initial
+            # subscriptions" in Tortoise, as Jackalope would not know
+            # about them; the upcoming Tortoise will expose a function
+            # for the subscriptions state!
             state = %State{
               state
               | subscriptions: Map.put(state.subscriptions, topic, subscription_opts)
@@ -237,7 +237,7 @@ defmodule Hare do
   end
 
   def handle_cast(:reconnect, state) do
-    :ok = Hare.TortoiseClient.reconnect()
+    :ok = Jackalope.TortoiseClient.reconnect()
 
     state = %State{
       state

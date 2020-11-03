@@ -1,7 +1,7 @@
-defmodule Hare.Handler.Logger do
+defmodule Jackalope.Handler.Logger do
   require Logger
 
-  @behaviour Hare.Handler
+  @behaviour Jackalope.Handler
 
   @impl true
   def connection(status) do

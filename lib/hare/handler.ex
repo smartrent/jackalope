@@ -1,10 +1,11 @@
-defmodule Hare.Handler do
-  @moduledoc """
-  Behaviour defining callbacks trigged during the life-cycle of Hare
+defmodule Jackalope.Handler do
+  @moduledoc
+  """
+  Behaviour defining callbacks trigged during the MQTT life-cycle
 
-  The hare handler is stateless, so if state is needed one could route
-  the messages to stateful processes, and inform the system about
-  connection and subscription state.
+  The jackalope handler is stateless, so if state is needed one could
+  route the messages to stateful processes, and inform the system
+  about connection and subscription state.
 
   Most of the callbacks are optional.
   """
@@ -44,13 +45,13 @@ defmodule Hare.Handler do
   @callback handle_message(topic, payload) :: any()
 
   @doc """
-  Handle errors produced by Hare that should be reacted to
+  Handle errors produced by Jackalope that should be reacted to
   """
   @callback handle_error(reason) :: any()
             when reason:
                    {:payload_decode_error, {topic, payload_string :: String.t()}}
                    | {:publish_error, {topic, payload, opts}, error_reason :: term}
-                   | {:publish_error, hare_work_order :: term, :ttl_expired},
+                   | {:publish_error, jackalope_work_order :: term, :ttl_expired},
                  opts: Keyword.t()
 
   @optional_callbacks connection: 1,

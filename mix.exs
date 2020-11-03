@@ -1,9 +1,9 @@
-defmodule Hare.MixProject do
+defmodule Jackalope.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :hare,
+      app: :jackalope,
       version: "0.1.0",
       elixir: "~> 1.10",
       start_permanent: Mix.env() == :prod,
@@ -16,7 +16,7 @@ defmodule Hare.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      mod: {Hare.Application, []},
+      mod: {Jackalope.Application, []},
       extra_applications: [:logger]
     ]
   end
