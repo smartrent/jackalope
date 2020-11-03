@@ -222,7 +222,7 @@ defmodule Hare.TortoiseClient do
     qos = Keyword.get(opts, :qos, state.default_qos)
     Logger.info("[Hare] Publishing #{topic} with payload #{payload}")
     # Async publish
-    case Tortoise.publish(client_id, topic, payload, qos: qos, timeout: client_id) do
+    case Tortoise.publish(client_id, topic, payload, qos: qos, timeout: 5000) do
       :ok ->
         :ok
 
