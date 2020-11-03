@@ -40,7 +40,14 @@ defmodule Hare do
 
   def subscribe({topic_filter, subscribe_opts}, opts) do
     cmd = {:subscribe, topic_filter, subscribe_opts}
-    GenServer.cast(__MODULE__, {:cmd, cmd, opts})
+
+    cond do
+      not (Keyword.get(subscribe_opts, :qos, 0) in [0, 1]) ->
+        {:error, :unsupported_qos}
+
+      _opts_looks_good! = true ->
+        GenServer.cast(__MODULE__, {:cmd, cmd, opts})
+    end
   end
 
   def subscribe(topic_filter, opts) do
