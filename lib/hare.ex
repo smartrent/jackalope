@@ -12,7 +12,6 @@ defmodule Hare do
 
   use GenServer
 
-  @behaviour Hare.AppHandler
   require Logger
 
   alias __MODULE__, as: State
@@ -104,7 +103,9 @@ defmodule Hare do
       for topic_filter <- initial_topics,
           do: {{:subscribe, topic_filter, []}, []}
 
-    {:ok, %State{work_list: work_list}, {:continue, :consume_work_list}}
+    initial_state = %State{work_list: work_list, handler: handler}
+
+    {:ok, initial_state, {:continue, :consume_work_list}}
   end
 
   @impl true
@@ -258,7 +259,6 @@ defmodule Hare do
         :consume_work_list,
         %State{
           connection_status: :online,
-          handler: handler,
           work_list: [{cmd, opts} = work_order | remaining],
           pending: pending
         } = state
