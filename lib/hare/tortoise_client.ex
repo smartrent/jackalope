@@ -1,4 +1,4 @@
-defmodule Hare.TortoiseClient do
+defmodule Jackalope.TortoiseClient do
   @moduledoc """
   The Tortoise client talks to Tortoise configured to use Amazon Web Service (AWS) IoT broker over a TLS
   connection.
@@ -10,7 +10,7 @@ defmodule Hare.TortoiseClient do
 
   defmodule State do
     defstruct connection: nil,
-              hare_pid: nil,
+              jackalope_pid: nil,
               handler: nil,
               client_id: nil,
               connection_options: [],
@@ -22,7 +22,7 @@ defmodule Hare.TortoiseClient do
   @doc "Start a Tortoise client"
   @spec start_link(any) :: GenServer.on_start()
   def start_link(init_args) do
-    Logger.info("[Hare] Starting Tortoise client with #{inspect(init_args)}")
+    Logger.info("[Jackalope] Starting Tortoise client with #{inspect(init_args)}")
     GenServer.start_link(__MODULE__, init_args, name: __MODULE__)
   end
 
@@ -82,15 +82,15 @@ defmodule Hare.TortoiseClient do
 
   @impl true
   def init(opts) do
-    case struct(%State{hare_pid: Hare.whereis()}, opts) do
+    case struct(%State{jackalope_pid: Jackalope.whereis()}, opts) do
       %State{client_id: nil} ->
         {:stop, :missing_client_id}
 
       %State{handler: nil} ->
         {:stop, :missing_handler}
 
-      %State{hare_pid: pid} when not is_pid(pid) ->
-        {:stop, :missing_hare_process}
+      %State{jackalope_pid: pid} when not is_pid(pid) ->
+        {:stop, :missing_jackalope_process}
 
       %State{} = initial_state ->
         {:ok, initial_state, {:continue, :spawn_connection}}
@@ -99,11 +99,11 @@ defmodule Hare.TortoiseClient do
 
   @impl true
   def handle_continue(:spawn_connection, %State{connection: nil} = state) do
-    Logger.info("[Hare] Spawning Tortoise connection")
+    Logger.info("[Jackalope] Spawning Tortoise connection")
     # Attempt to spawn a tortoise connection to the MQTT server; the
     # tortoise will attempt to connect to the server, so we are not
     # fully up once we got the process
-    tortoise_handler = {Hare.TortoiseHandler, handler: state.handler}
+    tortoise_handler = {Jackalope.TortoiseHandler, handler: state.handler}
 
     conn_opts =
       state.connection_options
@@ -120,17 +120,17 @@ defmodule Hare.TortoiseClient do
         {:noreply, state, {:continue, :subscribe_to_connection}}
 
       {:error, reason} ->
-        Logger.error("[Hare] Failed to create MQTT client: #{inspect(reason)}")
+        Logger.error("[Jackalope] Failed to create MQTT client: #{inspect(reason)}")
         {:stop, {:connection_failure, reason}, state}
 
       :ignore ->
-        Logger.warn("[Hare] Starting Tortoise connection IGNORED!")
+        Logger.warn("[Jackalope] Starting Tortoise connection IGNORED!")
         {:noreply, state}
     end
   end
 
   def handle_continue(:spawn_connection, %State{connection: pid} = state) when is_pid(pid) do
-    Logger.warn("[Hare] Already connected to MQTT broker. No need to connect.")
+    Logger.warn("[Jackalope] Already connected to MQTT broker. No need to connect.")
     {:noreply, state}
   end
 
@@ -156,18 +156,18 @@ defmodule Hare.TortoiseClient do
   end
 
   def handle_call({:subscribe, topic, _opts}, _from, %State{connection: nil} = state) do
-    Logger.warn("[Hare] Can't subscribe to #{inspect(topic)}: No connection")
+    Logger.warn("[Jackalope] Can't subscribe to #{inspect(topic)}: No connection")
     {:reply, {:error, :no_connection}, state}
   end
 
   def handle_call({:subscribe, topic, opts}, _from, %State{client_id: client_id} = state) do
     qos = Keyword.get(opts, :qos, 1)
-    Logger.debug("[Hare] Subscribing #{client_id} to #{inspect(topic)}")
+    Logger.debug("[Jackalope] Subscribing #{client_id} to #{inspect(topic)}")
     {:reply, Tortoise.Connection.subscribe(client_id, {topic, qos}), state}
   end
 
   def handle_call({:unsubscribe, topic_filter, _opts}, _from, %State{connection: nil} = state) do
-    Logger.warn("[Hare] Can't unsubscribe from #{inspect(topic_filter)}: No connection")
+    Logger.warn("[Jackalope] Can't unsubscribe from #{inspect(topic_filter)}: No connection")
     {:reply, {:error, :no_connection}, state}
   end
 
@@ -176,7 +176,7 @@ defmodule Hare.TortoiseClient do
         _from,
         %State{client_id: client_id} = state
       ) do
-    Logger.info("[Hare] Unsubscribing #{client_id} from topic #{inspect(topic_filter)}")
+    Logger.info("[Jackalope] Unsubscribing #{client_id} from topic #{inspect(topic_filter)}")
     {:reply, Tortoise.Connection.unsubscribe(client_id, topic_filter), state}
   end
 
@@ -206,21 +206,21 @@ defmodule Hare.TortoiseClient do
     end
   end
 
-  # Send the result to the Hare process; the Hare process will keep
-  # track of the references, and it knowns about the type of
+  # Send the result to the Jackalope process; the Jackalope process
+  # will keep track of the references, and it knowns about the type of
   # message--publish, subscribe, or unsubscribe--that the reference
   # relates to.
   def handle_info(
         {{Tortoise, _client_id}, reference, result},
         %State{} = state
       ) do
-    send(state.hare_pid, {:tortoise_result, reference, result})
+    send(state.jackalope_pid, {:tortoise_result, reference, result})
     {:noreply, state}
   end
 
   defp do_publish(%State{client_id: client_id} = state, topic, payload, opts) do
     qos = Keyword.get(opts, :qos, state.default_qos)
-    Logger.info("[Hare] Publishing #{topic} with payload #{payload}")
+    Logger.info("[Jackalope] Publishing #{topic} with payload #{payload}")
     # Async publish
     case Tortoise.publish(client_id, topic, payload, qos: qos, timeout: 5000) do
       :ok ->
