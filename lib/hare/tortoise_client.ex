@@ -10,7 +10,8 @@ defmodule Hare.TortoiseClient do
 
   defmodule State do
     defstruct connection: nil,
-              app_handler: Hare.DefaultAppHandler,
+              hare_pid: nil,
+              handler: nil,
               client_id: nil,
               connection_options: [],
               publish_timeout: 30_000,
@@ -81,9 +82,15 @@ defmodule Hare.TortoiseClient do
 
   @impl true
   def init(opts) do
-    case struct(State, opts) do
+    case struct(%State{hare_pid: Hare.whereis()}, opts) do
       %State{client_id: nil} ->
         {:stop, :missing_client_id}
+
+      %State{handler: nil} ->
+        {:stop, :missing_handler}
+
+      %State{hare_pid: pid} when not is_pid(pid) ->
+        {:stop, :missing_hare_process}
 
       %State{} = initial_state ->
         {:ok, initial_state, {:continue, :spawn_connection}}
@@ -96,12 +103,12 @@ defmodule Hare.TortoiseClient do
     # Attempt to spawn a tortoise connection to the MQTT server; the
     # tortoise will attempt to connect to the server, so we are not
     # fully up once we got the process
-    handler = {Hare.TortoiseHandler, [app_handler: state.app_handler]}
+    tortoise_handler = {Hare.TortoiseHandler, handler: state.handler}
 
     conn_opts =
       state.connection_options
       |> Keyword.put(:client_id, state.client_id)
-      |> Keyword.put(:handler, handler)
+      |> Keyword.put(:handler, tortoise_handler)
 
     case Tortoise.Supervisor.start_child(ConnectionSupervisor, conn_opts) do
       {:ok, pid} ->
@@ -188,36 +195,26 @@ defmodule Hare.TortoiseClient do
   # Tortoise network status changes
   def handle_info(
         {{Tortoise, client_id}, :status, network_status},
-        %State{client_id: client_id, app_handler: app_handler} = state
+        %State{client_id: client_id} = state
       ) do
     case network_status do
       :up ->
-        Logger.info("[Hare] MQTT client is online (#{client_id})")
-        apply(app_handler, :connection_status, [:up])
         {:noreply, state}
 
-      :down ->
-        Logger.info("[Hare] MQTT client is offline (#{client_id})")
-        {:noreply, state}
-
-      :terminating ->
-        Logger.info("[Hare] MQTT client is terminating (#{client_id})")
-        {:noreply, state}
-
-      :terminated ->
-        Logger.info("[Hare] MQTT client has terminated (#{client_id})")
+      status when status in [:down, :terminating, :terminated] ->
         {:noreply, state}
     end
   end
 
-  # result is :ok or {:error, reason}
-  # reference is known from prior publish, subscribe or unsubscribe
+  # Send the result to the Hare process; the Hare process will keep
+  # track of the references, and it knowns about the type of
+  # message--publish, subscribe, or unsubscribe--that the reference
+  # relates to.
   def handle_info(
-        {{Tortoise, client_id}, reference, result},
-        %State{app_handler: app_handler} = state
+        {{Tortoise, _client_id}, reference, result},
+        %State{} = state
       ) do
-    apply(app_handler, :tortoise_result, [client_id, reference, result])
-
+    send(state.hare_pid, {:tortoise_result, reference, result})
     {:noreply, state}
   end
 
@@ -233,9 +230,10 @@ defmodule Hare.TortoiseClient do
         {:ok, reference}
 
       {:error, reason} ->
-        Logger.warn(
-          "[Hare] Failed to publish #{inspect(topic)} with #{inspect(payload)}: #{reason}"
-        )
+        if function_exported?(state.handler, :handle_error, 1) do
+          reason = {:publish_error, {topic, payload, opts}, reason}
+          apply(state.handler, :handle_error, [reason])
+        end
 
         {:error, reason}
     end

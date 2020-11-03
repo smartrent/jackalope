@@ -12,46 +12,24 @@ defmodule Hare do
 
   use GenServer
 
-  @behaviour Hare.AppHandler
   require Logger
 
   alias __MODULE__, as: State
   alias Hare.TortoiseClient
 
-  @qos 1
-
   defstruct connection_status: :offline,
+            handler: nil,
             work_list: [],
             pending: %{},
             subscriptions: %{}
 
-  def start_link(_) do
+  def start_link(opts) do
     Logger.info("[Hare] Starting #{inspect(__MODULE__)}...")
-    GenServer.start_link(__MODULE__, nil, name: __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  ## Configuration support
-
-  @spec client_id() :: String.t()
-  def client_id(), do: Application.get_env(:hare, :client_id)
-
-  @spec connection_options() :: Keyword.t()
-  def connection_options() do
-    [
-      server: {
-        Tortoise.Transport.Tcp,
-        host: mqtt_host(), port: mqtt_port()
-      },
-      will: %Tortoise.Package.Publish{
-        topic: "#{client_id()}/message",
-        payload: "last will",
-        dup: false,
-        qos: @qos,
-        retain: false
-      },
-      # Subcriptions are set after all devices inclusions are recovered
-      backoff: [min_interval: 100, max_interval: 30_000]
-    ]
+  def whereis() do
+    GenServer.whereis(__MODULE__)
   end
 
   ## MQTT-ing
@@ -115,66 +93,19 @@ defmodule Hare do
     GenServer.cast(__MODULE__, :reconnect)
   end
 
-  ### AppHandler callbacks
-
   @impl true
-  def connection_status(status) do
-    Logger.info("[Hare] Tortoise connection is #{inspect(status)}")
-    GenServer.cast(__MODULE__, {:connection_status, status})
-  end
-
-  @impl true
-  def tortoise_result(client_id, reference, result) do
-    Logger.info(
-      "[Hare] Tortoise result for client #{inspect(client_id)} referenced by #{inspect(reference)} is #{
-        inspect(result)
-      }"
-    )
-
-    GenServer.cast(__MODULE__, {:tortoise_result, client_id, reference, result})
-  end
-
-  @impl true
-  def subscription(status, topic) do
-    Logger.info(
-      "[Hare] Subscription #{inspect(status)} for topic #{inspect(topic)} was requested"
-    )
-
-    :ok
-  end
-
-  @impl true
-  def message_received(topic, payload) do
-    Logger.info(
-      "[Hare] Tortoise received message with topic #{inspect(topic)} and payload #{
-        inspect(payload)
-      }"
-    )
-
-    :ok
-  end
-
-  @impl true
-  def invalid_payload(topic, payload) do
-    Logger.info(
-      "[Hare] Tortoise received an invalid message with topic #{inspect(topic)} and payload #{
-        inspect(payload)
-      }"
-    )
-
-    :ok
-  end
-
-  ### GenServer callbacks
-
-  @impl true
-  def init(_) do
+  def init(opts) do
+    handler = Keyword.fetch!(opts, :handler)
     # Produce subscription commands for the initial subscriptions
+    initial_topics = Keyword.get(opts, :initial_topics, [])
+
     work_list =
-      for topic_filter <- initial_topics(),
+      for topic_filter <- initial_topics,
           do: {{:subscribe, topic_filter, []}, []}
 
-    {:ok, %State{work_list: work_list}, {:continue, :consume_work_list}}
+    initial_state = %State{work_list: work_list, handler: handler}
+
+    {:ok, initial_state, {:continue, :consume_work_list}}
   end
 
   @impl true
@@ -184,12 +115,12 @@ defmodule Hare do
 
   @impl true
   # Connection status changes
-  def handle_cast({:connection_status, :up}, state) do
+  def handle_info({:connection_status, :up}, state) do
     state = %State{state | connection_status: :online}
     {:noreply, state, {:continue, :consume_work_list}}
   end
 
-  def handle_cast({:connection_status, status}, state)
+  def handle_info({:connection_status, status}, state)
       when status in [:down, :terminating, :terminated] do
     state = %State{
       state
@@ -221,8 +152,8 @@ defmodule Hare do
 
   # Handle responses to user initiated commands; subscribe,
   # unsubscribe, publish...
-  def handle_cast(
-        {:tortoise_result, _client_id, ref, res},
+  def handle_info(
+        {:tortoise_result, ref, res},
         %State{pending: pending} = state
       ) do
     {work_order, pending} = Map.pop(pending, ref)
@@ -267,6 +198,7 @@ defmodule Hare do
     end
   end
 
+  @impl true
   def handle_cast({:cmd, cmd, opts}, %State{work_list: work_list} = state) do
     # Setup the options for the work order; so far we support time to
     # live, which allow us to specify the time a work order is allowed
@@ -344,10 +276,17 @@ defmodule Hare do
         {:ok, ref} ->
           state = %State{state | pending: Map.put_new(pending, ref, work_order)}
           {:noreply, state, {:continue, :consume_work_list}}
+
+        {:error, :no_connection} ->
+          {:noreply, %{state | work_list: [work_order | remaining]}}
       end
     else
       # drop the message, it is outside of the time to live
-      Logger.warn("TTL Expired, Message dropped: #{inspect(cmd)}")
+      if function_exported?(state.handler, :handle_error, 1) do
+        reason = {:publish_error, cmd, :ttl_expired}
+        apply(state.handler, :handle_error, [reason])
+      end
+
       {:noreply, state, {:continue, :consume_work_list}}
     end
   end
@@ -366,11 +305,4 @@ defmodule Hare do
     # the future, keeping it to make future upgrades easier
     TortoiseClient.unsubscribe(topic_filter, opts)
   end
-
-  defp initial_topics() do
-    Application.get_env(:hare, :base_topics, [])
-  end
-
-  defp mqtt_host(), do: Application.get_env(:hare, :mqtt_host)
-  defp mqtt_port(), do: Application.get_env(:hare, :mqtt_port)
 end
