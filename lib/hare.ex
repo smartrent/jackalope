@@ -299,6 +299,9 @@ defmodule Hare do
         {:ok, ref} ->
           state = %State{state | pending: Map.put_new(pending, ref, work_order)}
           {:noreply, state, {:continue, :consume_work_list}}
+
+        {:error, :no_connection} ->
+          {:noreply, %{state | work_list: [work_order | remaining]}}
       end
     else
       # drop the message, it is outside of the time to live

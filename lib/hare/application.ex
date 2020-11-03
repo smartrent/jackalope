@@ -5,12 +5,13 @@ defmodule Hare.Application do
 
   def start(_type, _args) do
     initial_topics = Application.get_env(:hare, :base_topics, [])
+    hare_handler = Application.get_env(:hare, :handler, Hare.Handler.Logger)
 
     children = [
       {Hare, [initial_topics: initial_topics]},
       {Hare.Supervisor,
        [
-         app_handler: Hare,
+         handler: hare_handler,
          client_id: client_id(),
          connection_options: connection_options()
        ]}

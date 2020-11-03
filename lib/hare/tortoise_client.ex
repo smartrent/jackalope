@@ -11,7 +11,7 @@ defmodule Hare.TortoiseClient do
   defmodule State do
     defstruct connection: nil,
               hare_pid: nil,
-              app_handler: nil,
+              handler: nil,
               client_id: nil,
               connection_options: [],
               publish_timeout: 30_000,
@@ -86,8 +86,8 @@ defmodule Hare.TortoiseClient do
       %State{client_id: nil} ->
         {:stop, :missing_client_id}
 
-      %State{app_handler: nil} ->
-        {:stop, :missing_app_handler}
+      %State{handler: nil} ->
+        {:stop, :missing_handler}
 
       %State{hare_pid: pid} when not is_pid(pid) ->
         {:stop, :missing_hare_process}
@@ -103,12 +103,12 @@ defmodule Hare.TortoiseClient do
     # Attempt to spawn a tortoise connection to the MQTT server; the
     # tortoise will attempt to connect to the server, so we are not
     # fully up once we got the process
-    handler = {Hare.TortoiseHandler, [app_handler: state.app_handler]}
+    tortoise_handler = {Hare.TortoiseHandler, handler: state.handler}
 
     conn_opts =
       state.connection_options
       |> Keyword.put(:client_id, state.client_id)
-      |> Keyword.put(:handler, handler)
+      |> Keyword.put(:handler, tortoise_handler)
 
     case Tortoise.Supervisor.start_child(ConnectionSupervisor, conn_opts) do
       {:ok, pid} ->
@@ -199,19 +199,9 @@ defmodule Hare.TortoiseClient do
       ) do
     case network_status do
       :up ->
-        Logger.info("[Hare] MQTT client is online (#{client_id})")
         {:noreply, state}
 
-      :down ->
-        Logger.info("[Hare] MQTT client is offline (#{client_id})")
-        {:noreply, state}
-
-      :terminating ->
-        Logger.info("[Hare] MQTT client is terminating (#{client_id})")
-        {:noreply, state}
-
-      :terminated ->
-        Logger.info("[Hare] MQTT client has terminated (#{client_id})")
+      status when status in [:down, :terminating, :terminated] ->
         {:noreply, state}
     end
   end
@@ -240,9 +230,10 @@ defmodule Hare.TortoiseClient do
         {:ok, reference}
 
       {:error, reason} ->
-        Logger.warn(
-          "[Hare] Failed to publish #{inspect(topic)} with #{inspect(payload)}: #{reason}"
-        )
+        if function_exported?(state.handler, :handle_error, 1) do
+          reason = {:publish_error, {topic, payload, opts}, reason}
+          apply(state.handler, :handle_error, [reason])
+        end
 
         {:error, reason}
     end
