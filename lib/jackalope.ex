@@ -30,6 +30,8 @@ defmodule Jackalope do
     Supervisor.init(children, strategy: :rest_for_one)
   end
 
+  defdelegate reconnect(), to: Jackalope.Session
+
   defdelegate publish(topic, payload, opts \\ []), to: Jackalope.Session
 
   defdelegate subscribe(topic, opts \\ []), to: Jackalope.Session
