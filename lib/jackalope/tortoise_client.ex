@@ -105,8 +105,7 @@ defmodule Jackalope.TortoiseClient do
     # fully up once we got the process
     tortoise_handler = {
       Jackalope.TortoiseHandler,
-      handler: state.handler,
-      jackalope_pid: state.jackalope_pid
+      handler: state.handler, jackalope_pid: state.jackalope_pid
     }
 
     conn_opts =
