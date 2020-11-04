@@ -115,10 +115,10 @@ defmodule Jackalope.Session do
   def init(opts) do
     handler = Keyword.fetch!(opts, :handler)
     # Produce subscription commands for the initial subscriptions
-    initial_topics = Keyword.get(opts, :initial_topics, [])
+    initial_topics = Keyword.get(opts, :initial_topics)
 
     work_list =
-      for topic_filter <- initial_topics,
+      for topic_filter <- List.wrap(initial_topics),
           do: {{:subscribe, topic_filter, []}, []}
 
     initial_state = %State{work_list: work_list, handler: handler}
