@@ -6,7 +6,8 @@ defmodule Jackalope do
   end
 
   @impl true
-  def init(_opts) do
+  def init(opts) do
+    client_id = Keyword.get(opts, :client_id, Application.get_env(:jackalope, :client_id))
     initial_topics = Application.get_env(:jackalope, :base_topics, [])
     jackalope_handler = Application.get_env(:jackalope, :handler, Jackalope.Handler.Logger)
 
@@ -15,8 +16,8 @@ defmodule Jackalope do
       {Jackalope.Supervisor,
        [
          handler: jackalope_handler,
-         client_id: client_id(),
-         connection_options: connection_options()
+         client_id: client_id,
+         connection_options: connection_options(opts)
        ]}
     ]
 
@@ -36,25 +37,28 @@ defmodule Jackalope do
   defdelegate unsubscribe(topic, opts \\ []), to: Jackalope.Session
 
   # TODO Get rid of this stuff
-  defp client_id(), do: Application.get_env(:jackalope, :client_id)
+  defp connection_options(opts) do
+    mqtt_host = Application.get_env(:jackalope, :mqtt_host)
+    mqtt_port = Application.get_env(:jackalope, :mqtt_port)
 
-  defp connection_options() do
     [
       server: {
         Tortoise.Transport.Tcp,
-        host: mqtt_host(), port: mqtt_port()
+        host: mqtt_host, port: mqtt_port
       },
-      will: %Tortoise.Package.Publish{
-        topic: "#{client_id()}/message",
-        payload: "last will",
-        dup: false,
-        qos: 1,
-        retain: false
-      },
+      will: last_will(Keyword.get(opts, :last_will)),
       backoff: [min_interval: 100, max_interval: 30_000]
     ]
   end
 
-  defp mqtt_host(), do: Application.get_env(:jackalope, :mqtt_host)
-  defp mqtt_port(), do: Application.get_env(:jackalope, :mqtt_port)
+  defp last_will(last_will) do
+    if last_will do
+      %Tortoise.Package.Publish{
+        topic: Keyword.fetch!(last_will, :topic),
+        payload: Keyword.get(last_will, :payload, nil),
+        qos: Keyword.get(last_will, :qos, 0),
+        retain: false
+      }
+    end
+  end
 end
