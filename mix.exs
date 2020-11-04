@@ -15,10 +15,7 @@ defmodule Jackalope.MixProject do
 
   # Run "mix help compile.app" to learn about applications.
   def application do
-    [
-      mod: {Jackalope.Application, []},
-      extra_applications: [:logger]
-    ]
+    [extra_applications: [:logger]]
   end
 
   # Run "mix help deps" to learn about dependencies.
