@@ -7,8 +7,8 @@ defmodule Jackalope do
 
   @impl true
   def init(opts) do
-    client_id = Keyword.get(opts, :client_id, Application.get_env(:jackalope, :client_id))
-    initial_topics = Application.get_env(:jackalope, :base_topics, [])
+    client_id = Keyword.get(opts, :client_id, "jackalope")
+    initial_topics = Keyword.get(opts, :initial_topics)
     jackalope_handler = Application.get_env(:jackalope, :handler, Jackalope.Handler.Logger)
 
     children = [
@@ -40,8 +40,8 @@ defmodule Jackalope do
 
   # TODO Get rid of this stuff
   defp connection_options(opts) do
-    mqtt_host = Application.get_env(:jackalope, :mqtt_host)
-    mqtt_port = Application.get_env(:jackalope, :mqtt_port)
+    mqtt_host = Keyword.get(opts, :mqtt_host, "localhost")
+    mqtt_port = Keyword.get(opts, :mqtt_port, 1883)
 
     [
       server: {
