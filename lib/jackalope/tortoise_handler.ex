@@ -13,7 +13,7 @@ defmodule Jackalope.TortoiseHandler do
   def init(opts) do
     initial_state = %State{
       handler: Keyword.fetch!(opts, :handler),
-      jackalope_pid: Jackalope.whereis()
+      jackalope_pid: Keyword.fetch!(opts, :jackalope_pid)
     }
 
     {:ok, initial_state}
