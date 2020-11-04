@@ -8,7 +8,7 @@ defmodule Jackalope.Application do
     jackalope_handler = Application.get_env(:jackalope, :handler, Jackalope.Handler.Logger)
 
     children = [
-      {Jackalope, [initial_topics: initial_topics, handler: jackalope_handler]},
+      {Jackalope.Session, [initial_topics: initial_topics, handler: jackalope_handler]},
       {Jackalope.Supervisor,
        [
          handler: jackalope_handler,

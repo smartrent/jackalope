@@ -82,7 +82,7 @@ defmodule Jackalope.TortoiseClient do
 
   @impl true
   def init(opts) do
-    case struct(%State{jackalope_pid: Jackalope.whereis()}, opts) do
+    case struct(%State{jackalope_pid: Jackalope.Session.whereis()}, opts) do
       %State{client_id: nil} ->
         {:stop, :missing_client_id}
 
@@ -103,7 +103,11 @@ defmodule Jackalope.TortoiseClient do
     # Attempt to spawn a tortoise connection to the MQTT server; the
     # tortoise will attempt to connect to the server, so we are not
     # fully up once we got the process
-    tortoise_handler = {Jackalope.TortoiseHandler, handler: state.handler}
+    tortoise_handler = {
+      Jackalope.TortoiseHandler,
+      handler: state.handler,
+      jackalope_pid: state.jackalope_pid
+    }
 
     conn_opts =
       state.connection_options
