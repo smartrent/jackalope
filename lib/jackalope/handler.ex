@@ -1,6 +1,5 @@
 defmodule Jackalope.Handler do
-  @moduledoc
-  """
+  @moduledoc """
   Behaviour defining callbacks trigged during the MQTT life-cycle
 
   The jackalope handler is stateless, so if state is needed one could
