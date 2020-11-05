@@ -1,10 +1,13 @@
 defmodule Jackalope.MixProject do
   use Mix.Project
 
+  @version "0.1.0"
+  @source_url "https://github.com/smartrent/jackalope"
+
   def project do
     [
       app: :jackalope,
-      version: "0.1.0",
+      version: @version,
       elixir: "~> 1.10",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -23,7 +26,7 @@ defmodule Jackalope.MixProject do
     [
       {:tortoise, "~> 0.9"},
       {:jason, "~> 1.1"},
-      {:dialyxir, "~> 1.0.0-rc.3", only: [:test, :dev], runtime: false}
+      {:dialyxir, "~> 1.0.0", only: [:test, :dev], runtime: false}
     ]
   end
 
@@ -33,7 +36,8 @@ defmodule Jackalope.MixProject do
 
   defp package do
     [
-      links: %{"GitHub" => "https://github.com/smartrent/hare"}
+      licenses: ["Apache-2.0"],
+      links: %{"GitHub" => @source_url}
     ]
   end
 end
