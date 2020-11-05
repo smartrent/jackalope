@@ -1,6 +1,11 @@
 defmodule Jackalope do
   use Supervisor
 
+  @default_mqtt_server {
+    Tortoise.Transport.Tcp,
+    host: "localhost", port: 1883
+  }
+
   @doc """
   Start a Jackalope session
 
@@ -37,12 +42,12 @@ defmodule Jackalope do
     `Jackalope.Handler` for more information on the events and
     callbacks.
 
-  - `server` (default: {Tortoise.Transport.Tcp, host: "localhost", port: 1883})
-    specifies the connection type, and its options, to use when
-    connecting to the MQTT server. The default specification will
-    attempt to connect to a broker running on localhost:1883, on an
-    unsecure connection. This value should only be used for testing
-    and development;.
+  - `server` (default: #{inspect @default_mqtt_server}) specifies the
+    connection type, and its options, to use when connecting to the
+    MQTT server. The default specification will attempt to connect to
+    a broker running on localhost:1883, on an unsecure
+    connection. This value should only be used for testing and
+    development;.
 
   - `last_will` (default: nil) specifies the last will message that
     should get published on the MQTT broker if the connection is
@@ -106,10 +111,7 @@ defmodule Jackalope do
   # TODO Get rid of this stuff
   defp connection_options(opts) do
     server =
-      Keyword.get(opts, :server, {
-        Tortoise.Transport.Tcp,
-        host: "localhost", port: 1883
-      })
+      Keyword.get(opts, :server, @default_mqtt_server)
       |> do_configure_server()
 
     [
