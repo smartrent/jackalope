@@ -1,5 +1,7 @@
 defmodule Jackalope.Supervisor do
-  @moduledoc "A supervisor for all things MQTT"
+  @moduledoc false
+
+  # Supervisor for the MQTT connection specific processes
 
   use Supervisor
   require Logger

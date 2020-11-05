@@ -1,8 +1,8 @@
 defmodule Jackalope.TortoiseClient do
-  @moduledoc """
-  The Tortoise client talks to Tortoise configured to use Amazon Web Service (AWS) IoT broker over a TLS
-  connection.
-  """
+  @moduledoc false
+
+  # The Tortoise client talks to Tortoise configured to use Amazon Web
+  # Service (AWS) IoT broker over a TLS connection.
 
   use GenServer
 

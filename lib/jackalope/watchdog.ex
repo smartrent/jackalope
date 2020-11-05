@@ -1,5 +1,8 @@
 defmodule Jackalope.Watchdog do
-  @moduledoc "Keeps a heartbeat on the Tortoise connection and crashes if Tortoise becomes unresponsive."
+  @moduledoc false
+
+  # Keeps a heartbeat on the Tortoise connection and crashes if
+  # Tortoise becomes unresponsive.
 
   use GenServer
   require Logger
