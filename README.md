@@ -1,6 +1,8 @@
 # Jackalope
 
-Jackalope is a sample MQTT application plus utility modules meant to
+<!-- MDOC !--> 
+
+`Jackalope` is a sample MQTT application plus utility modules meant to
 simplify the use of Tortoise connecting to a MQTT server on Amazon
 IoT.
 
@@ -31,6 +33,8 @@ Jackalope aims to make an interface that:
 Besides this Jackalope aims to provide helpers for local testing,
 allowing you to test your application without having a connection to
 AWS; Jackalope should take care of that.
+
+<!-- MDOC !-->
 
 ## MQTT broker
 

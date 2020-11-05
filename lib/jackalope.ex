@@ -1,6 +1,11 @@
 defmodule Jackalope do
   use Supervisor
 
+  @moduledoc "README.md"
+             |> File.read!()
+             |> String.split("<!-- MDOC !-->")
+             |> Enum.fetch!(1)
+
   @default_mqtt_server {
     Tortoise.Transport.Tcp,
     host: "localhost", port: 1883
@@ -42,7 +47,7 @@ defmodule Jackalope do
     `Jackalope.Handler` for more information on the events and
     callbacks.
 
-  - `server` (default: #{inspect @default_mqtt_server}) specifies the
+  - `server` (default: #{inspect(@default_mqtt_server)}) specifies the
     connection type, and its options, to use when connecting to the
     MQTT server. The default specification will attempt to connect to
     a broker running on localhost:1883, on an unsecure
