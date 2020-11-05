@@ -33,7 +33,7 @@ defmodule Jackalope.MixProject do
 
   defp package do
     [
-      links: %{"GitHub" => "https://github.com/smartrent/hare"}
+      links: %{"GitHub" => "https://github.com/smartrent/jackalope"}
     ]
   end
 end
