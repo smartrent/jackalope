@@ -106,7 +106,6 @@ defmodule Jackalope.Session do
   def status() do
     GenServer.call(__MODULE__, :status)
   end
-
   def reconnect() do
     GenServer.cast(__MODULE__, :reconnect)
   end
