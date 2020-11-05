@@ -110,6 +110,7 @@ defmodule Jackalope do
         Tortoise.Transport.Tcp,
         host: "localhost", port: 1883
       })
+      |> do_configure_server()
 
     [
       server: server,
@@ -133,4 +134,30 @@ defmodule Jackalope do
 
   defp encode_last_will_payload(nil), do: nil
   defp encode_last_will_payload(term), do: Jason.encode!(term)
+
+  # Pass normal Tortoise transports through as is; assume that the
+  # configuration is correct!
+  defp do_configure_server({Tortoise.Transport.Tcp, _opts} = keep), do: keep
+  defp do_configure_server({Tortoise.Transport.SSL, _opts} = keep), do: keep
+  # Attempt to create setup a connection that works with AWS IoT
+  defp do_configure_server(aws_iot_opts) when is_list(aws_iot_opts) do
+    # TODO Setup the opts for the SSL transport!
+    opts = aws_iot_opts
+    # verify: :verify_peer,
+    # versions: [:"tlsv1.2"],
+
+    # host: mqtt_host(),
+    # port: mqtt_port(),
+
+    # alpn_advertised_protocols: alpn_advertised_protocols(), ?
+    # server_name_indication: server_name_indication(), ?
+
+    # cert: cert,
+    # key: key,
+    # cacerts: cacerts,
+
+    # partial_chain: &partial_chain/1
+
+    {Tortoise.Transport.SSL, opts}
+  end
 end
