@@ -105,13 +105,96 @@ defmodule Jackalope do
     Supervisor.init(children, strategy: :rest_for_one)
   end
 
+  @doc """
+  Request the MQTT client to reconnect to the broker
+
+  This can be useful on devices that has multiple network
+  interfaces. After the reconnect Jackalope will subscribe to the
+  topic_filters it was subscribed to, ensuring that we are in sync
+  with the subscription state.
+  """
   defdelegate reconnect(), to: Jackalope.Session
 
+  @doc """
+  Publish a message to the MQTT broker
+
+  The `payload` will get published on `topic`. `Jackalope` will keep
+  the message in a queue until we got a connection, at which point it
+  will dispatch the publish. This of course present us with a problem:
+  what if we place a publish request to "unlock the frontdoor" while
+  the client is offline? We don't want to receive a message that the
+  frontdoor has been unlocked two hours later when the MQTT client
+  reconnect; To solve that problem we have a `ttl` option we can
+  specify on the publish.
+
+    Jackalope.publish("doors/frontdoor", %{action: "unlock"}, ttl: 5_000)
+
+  Currently `ttl` is the only queue option available; to set MQTT
+  Publish options, such as the quality of service, can be done like
+  this:
+
+    Jackalope.publish({"room/salon/temp", qos: 1}, %{temp: 21})
+
+  The avaialable package options are:
+
+    - `qos` (default `1`) set the quality of service of the message
+      delivery; Notice that only quality of service 0 an 1 are
+      supported by AWS IoT; specifying 2 will result in an error.
+
+    - `retain` has to be false, as AWS IoT does not support retained
+      publish messages
+
+  Notice that Jackalope will JSON encode the `payload`; so the data
+  should be JSON encodable.
+  """
   defdelegate publish(topic, payload, opts \\ []), to: Jackalope.Session
 
-  defdelegate subscribe(topic, opts \\ []), to: Jackalope.Session
+  @doc """
+  Place a subscription request for a given `topic_filter`
 
-  defdelegate unsubscribe(topic, opts \\ []), to: Jackalope.Session
+  Once Jackalope has successfully subscribed to the `topic_filter` it
+  will get added to the list of topic filters to ensure when
+  reconnecting; this ensure that Jackalope have a consistent view of
+  the subscription state, even if the MQTT client reconnect with a
+  clean session state.
+
+    Jackalope.subscribe("rooms/living-room/temperature")
+
+  It is possible to specify the maximum quality of service to
+  subscribe to like so:
+
+    Jackalope.subscribe({"rooms/kitchen/water-leak-sensor", qos: 1})
+
+  The default QoS is 1; Notice that AWS IoT does not support
+  subscriptions with QoS=2, so only 0 and 1 are permitted.
+
+  Like the public message it is possible to set a time to live on the
+  subscribe request:
+
+    Jackalope.subscribe("golf/+/result", ttl: 5_000)
+
+  This will not dispatch the subscribe request Jackalope cannot get it
+  to the broker within the specified duration (in ms).
+  """
+  defdelegate subscribe(topic_filter, opts \\ []), to: Jackalope.Session
+
+  @doc """
+  Place an unsubscribe request for the given `topic_filter`
+
+  This will place a unsubscribe and inform Jackalope to remove the
+  given `topic_filter` from the list of subscriptions to ensure.
+
+    Jackalope.unsubscribe("room/lobby/doorbell")
+
+  The only configuration option is the `ttl` value, which can be set
+  like so:
+
+    Jackalope.unsubscribe("room/lobby/doorbell", ttl: 1_000)
+
+  Like all the other messages, this will drop the message if it stays
+  too long in the queue.
+  """
+  defdelegate unsubscribe(topic_filter, opts \\ []), to: Jackalope.Session
 
   # TODO Get rid of this stuff
   defp connection_options(opts) do

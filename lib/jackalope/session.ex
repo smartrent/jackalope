@@ -1,14 +1,14 @@
 defmodule Jackalope.Session do
-  @moduledoc """
-  MQTT session logic
+  @moduledoc false
 
-  The Jackalope module will serve as a message box, tracking the
-  status of the messages currently handled by Tortoise. This part of
-  the application is not supervised in the same supervision branch as
-  Tortoise, so we shouldn't drop important messages if Tortoise, or
-  any of its siblings should crash; and we should retry messages that
-  was not delivered for whatever reason.
-  """
+  # MQTT session logic
+
+  # The Jackalope module will serve as a message box, tracking the
+  # status of the messages currently handled by Tortoise. This part of
+  # the application is not supervised in the same supervision branch as
+  # Tortoise, so we shouldn't drop important messages if Tortoise, or
+  # any of its siblings should crash; and we should retry messages that
+  # was not delivered for whatever reason.
 
   use GenServer
 
@@ -33,9 +33,7 @@ defmodule Jackalope.Session do
   end
 
   ## MQTT-ing
-  @doc """
-  Subscribe to a topic filter on the MQTT server
-  """
+  @doc false
   def subscribe(subscription, opts \\ [])
 
   def subscribe({topic_filter, subscribe_opts}, opts) do
@@ -55,9 +53,7 @@ defmodule Jackalope.Session do
     subscribe({topic_filter, []}, opts)
   end
 
-  @doc """
-  Unsubscribe from a topic filter on the MQTT server
-  """
+  @doc false
   def unsubscribe(ubsubscribe, opts \\ [])
 
   def unsubscribe({topic_filter, unsubscribe_opts}, opts) do
@@ -70,9 +66,7 @@ defmodule Jackalope.Session do
     unsubscribe({topic_filter, []}, opts)
   end
 
-  @doc """
-  Publish an MQTT message
-  """
+  @doc false
   def publish(topic_and_opts, payload, opts \\ [])
 
   def publish({topic, publish_opts}, payload, opts) when is_list(topic) do
@@ -102,11 +96,12 @@ defmodule Jackalope.Session do
     end
   end
 
-  ## Testing
+  @doc false
   def status() do
     GenServer.call(__MODULE__, :status)
   end
 
+  @doc false
   def reconnect() do
     GenServer.cast(__MODULE__, :reconnect)
   end

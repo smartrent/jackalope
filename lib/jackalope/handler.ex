@@ -60,7 +60,7 @@ defmodule Jackalope.Handler do
 
     @impl true
     def handle_error({:publish_error, workorder, :ttl_expired}) do
-      Logger.error("Workorder expired: #{inspect workorder}")
+      Logger.error("Workorder expired: \#{inspect workorder}")
     end
 
     def handle_error(_otherwise) do
