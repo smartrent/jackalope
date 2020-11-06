@@ -48,7 +48,7 @@ defmodule Jackalope.Handler do
   optional `handle_error/1` callback would have been triggered
   instead.
   """
-  @callback handle_message(topic, payload) :: any()
+  @callback handle_message([topic], payload) :: any()
 
   @doc """
   Handle errors produced by Jackalope that should be reacted to
