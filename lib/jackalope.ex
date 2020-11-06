@@ -148,8 +148,12 @@ defmodule Jackalope do
   defp do_configure_server({Tortoise.Transport.SSL, _opts} = keep), do: keep
   # Attempt to create setup a connection that works with AWS IoT
   defp do_configure_server(aws_iot_opts) when is_list(aws_iot_opts) do
+    # TODO improve the user experience when working with AWS IoT and
+    #   then remove this raise
+    raise ArgumentError, "Please specify a Tortoise transport for the server"
+
     # TODO Setup the opts for the SSL transport!
-    opts = aws_iot_opts
+    # opts = aws_iot_opts
     # verify: :verify_peer,
     # versions: [:"tlsv1.2"],
 
@@ -165,6 +169,6 @@ defmodule Jackalope do
 
     # partial_chain: &partial_chain/1
 
-    {Tortoise.Transport.SSL, opts}
+    # {Tortoise.Transport.SSL, opts}
   end
 end
