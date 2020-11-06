@@ -6,7 +6,7 @@
 simplify the use of Tortoise connecting to a MQTT server on Amazon
 IoT.
 
-Tortoise is a laissez-faire framework for building opinionated MQTT
+`Tortoise` is a laissez-faire framework for building opinionated MQTT
 clients, and Jackalope is one of them. Technically the MQTT servers
 running on AWS IoT implement a subset of the MQTT 3.1.1
 specification. Notably the maximum quality of service allowed on
@@ -28,32 +28,51 @@ Jackalope aims to make an interface that:
   publishing a message with the retain flag set
 
 - Ensure that important messages are delivered to the broker, by
-  having a local "post office" and tracking the in flight messages
+  having a local "post office" and tracking the in flight messages,
+  and implementing a concept of ttl (time to live) on the messages
+  placed in the mailbox; ensuring the "request to unlock the door"
+  won't happen two hours later when the MQTT connection finally
+  reconnects. This allows Jackalope to accept publish and subscription
+  requests while the connection is down.
 
 Besides this Jackalope aims to provide helpers for local testing,
 allowing you to test your application without having a connection to
 AWS; Jackalope should take care of that.
 
-<!-- MDOC !-->
-
-## MQTT broker
-
-As currently configured, for local development, Jackalope expects an
-MQTT broker running on localhost via port 1883 with no security.
-
 ## Usage
 
-```elixir
-# the client should connect automatically when the broker is available
-Jackalope.subscribe("racing")
-Jackalope.publish("racing", 123)
-Jackalope.unsubscribe("racing")
-```
+The `Jackalope` module implements a `start_link/1` function; use this
+to start `Jackalope` as part of your application supervision tree. If
+properly supervised it will allow you to start and stop `Jackalope`
+with the part the application that needs MQTT
+connectivity. `Jackalope` is configured using a keyword list, consult
+the `Jackalope.start_link/1` documentation for information on the
+available option values.
 
-## Using mosquitto sub and pub
+Once `Jackalope` is running it is possible to subscribe, unsubscribe,
+and publish messages to the broker; in addition to this there are some
+connection specific functionality is exposed, allowing us to ask for
+the connection status, and request a connection reconnect.
 
-`mosquitto_sub -h localhost -p 1883 -t #`
-`mosquitto_pub -h localhost -p 1883 -t testing -m 123`
+- `Jackalope.subscribe(topic)` request a subscription to a specific
+  topic. The topic will be added to the list of topics `Jackalope`
+  will ensure we are subscribed to.
+  
+- `Jackalope.unsubscribe(topic)` will request an unsubscribe from a
+  specific topic and remove the topic from the list of topics
+  `Jackalope` ensure are subscribed to.
+  
+- `Jackalope.publish(topic, payload)` will publish a message to the
+  MQTT broker; 
+
+- `Jackalope.reconnect()` will disconnect from the broker and
+  reconnect; this is useful if the device changes network connection.
+
+Please see the documentation for each of the functions for more
+information on usage; especially the subscribe and publish functions
+accepts options such as setting quality of service and time to live.
+
+<!-- MDOC !-->
 
 ## Installation
 
@@ -69,7 +88,8 @@ def deps do
 end
 ```
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/jackalope](https://hexdocs.pm/jackalope).
+Documentation can be generated with
+[ExDoc](https://github.com/elixir-lang/ex_doc) and published on
+[HexDocs](https://hexdocs.pm). Once published, the docs can be found
+at [https://hexdocs.pm/jackalope](https://hexdocs.pm/jackalope).
 
