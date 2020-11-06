@@ -1,4 +1,11 @@
 defmodule Jackalope.Handler.Logger do
+  @moduledoc """
+  A `Jackalope.Handler` that logs everything it sees
+
+  This handler will be used by `Jackalope` if no `handler` has been
+  specified in the option list passed to `Jackalope.start_link/1`.
+  """
+
   require Logger
 
   @behaviour Jackalope.Handler

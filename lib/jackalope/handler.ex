@@ -17,7 +17,9 @@ defmodule Jackalope.Handler do
   Called when the MQTT connection changes status
 
   This can be used to inform other parts of the system about the state
-  of the connection; up or down?
+  of the connection; possible values are `:up` and `:down`, where up
+  means that the MQTT client has a connection to the broker; down
+  means that the connection has been dropped.
   """
   @callback connection(status :: :up | :down) :: any()
 
@@ -26,6 +28,11 @@ defmodule Jackalope.Handler do
 
   This can be used to inform other parts of the system that we should
   (or shouldn't) expect messages received on the given `topic_filter`.
+
+  The status values are `:up` and `:down`, where up means that the
+  broker has accepted a subscription request to the specific
+  `topic_filter`, and down means that the broker has accepted an
+  unsubscribe request.
   """
   @callback subscription(status :: :up | :down, topic_filter) :: any()
 
@@ -36,7 +43,7 @@ defmodule Jackalope.Handler do
   form, where each of the topic levels are an item. This allows us to
   pattern match on topic filters with wildcards.
 
-  The payload should be a term; we at this point the message will have
+  The payload should be a term; at this point the message will have
   been run through a JSON decoder. If the JSON decode should fail the
   optional `handle_error/1` callback would have been triggered
   instead.
@@ -45,6 +52,23 @@ defmodule Jackalope.Handler do
 
   @doc """
   Handle errors produced by Jackalope that should be reacted to
+
+  During the connection life-cycle various errors can occur, and while
+  Jackrabbit and Tortoise will try to correct the situation, some
+  errors require user intervention. The optional `handle_error/1`
+  callback can help inform the surrounding system of errors.
+
+    @impl true
+    def handle_error({:publish_error, workorder, :ttl_expired}) do
+      Logger.error("Workorder expired: #{inspect workorder}")
+    end
+
+    def handle_error(_otherwise) do
+      _ignore = nil
+    end
+
+  If this callback is implemented one should make sure to make a
+  catch-all to prevent unhandled errors from crashing the handler.
   """
   @callback handle_error(reason) :: any()
             when reason:
