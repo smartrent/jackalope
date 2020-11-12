@@ -3,7 +3,7 @@
 [![CircleCI](https://circleci.com/gh/smartrent/jackalope.svg?style=svg)](https://circleci.com/gh/smartrent/jackalope)
 [![Hex version](https://img.shields.io/hexpm/v/jackalope.svg "Hex version")](https://hex.pm/packages/jackalope)
 
-<!-- MDOC !--> 
+<!-- MDOC !-->
 
 `Jackalope` is a sample MQTT application plus utility modules meant to
 simplify the use of Tortoise connecting to a MQTT server on Amazon
@@ -60,13 +60,13 @@ the connection status, and request a connection reconnect.
 - `Jackalope.subscribe(topic)` request a subscription to a specific
   topic. The topic will be added to the list of topics `Jackalope`
   will ensure we are subscribed to.
-  
+
 - `Jackalope.unsubscribe(topic)` will request an unsubscribe from a
   specific topic and remove the topic from the list of topics
   `Jackalope` ensure are subscribed to.
-  
+
 - `Jackalope.publish(topic, payload)` will publish a message to the
-  MQTT broker; 
+  MQTT broker;
 
 - `Jackalope.reconnect()` will disconnect from the broker and
   reconnect; this is useful if the device changes network connection.
@@ -95,4 +95,3 @@ Documentation can be generated with
 [ExDoc](https://github.com/elixir-lang/ex_doc) and published on
 [HexDocs](https://hexdocs.pm). Once published, the docs can be found
 at [https://hexdocs.pm/jackalope](https://hexdocs.pm/jackalope).
-

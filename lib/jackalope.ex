@@ -127,13 +127,17 @@ defmodule Jackalope do
   reconnect; To solve that problem we have a `ttl` option we can
   specify on the publish.
 
-    Jackalope.publish("doors/frontdoor", %{action: "unlock"}, ttl: 5_000)
+  ```elixir
+  Jackalope.publish("doors/frontdoor", %{action: "unlock"}, ttl: 5_000)
+  ```
 
   Currently `ttl` is the only queue option available; to set MQTT
   Publish options, such as the quality of service, can be done like
   this:
 
-    Jackalope.publish({"room/salon/temp", qos: 1}, %{temp: 21})
+  ```elixir
+  Jackalope.publish({"room/salon/temp", qos: 1}, %{temp: 21})
+  ```
 
   The avaialable package options are:
 
