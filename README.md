@@ -1,5 +1,8 @@
 # Jackalope
 
+[![CircleCI](https://circleci.com/gh/smartrent/jackalope.svg?style=svg)](https://circleci.com/gh/smartrent/jackalope)
+[![Hex version](https://img.shields.io/hexpm/v/jackalope.svg "Hex version")](https://hex.pm/packages/jackalope)
+
 <!-- MDOC !--> 
 
 `Jackalope` is a sample MQTT application plus utility modules meant to
