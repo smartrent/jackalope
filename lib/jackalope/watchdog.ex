@@ -8,6 +8,8 @@ defmodule Jackalope.Watchdog do
   require Logger
 
   defmodule State do
+    @moduledoc false
+
     defstruct client_id: nil,
               # until proved otherwise
               alive?: true,
