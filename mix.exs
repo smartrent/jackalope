@@ -30,7 +30,8 @@ defmodule Jackalope.MixProject do
     [
       {:tortoise, "~> 0.9"},
       {:jason, "~> 1.1"},
-      {:dialyxir, "~> 1.0.0", only: [:test, :dev], runtime: false}
+      {:dialyxir, "~> 1.0.0", only: [:test, :dev], runtime: false},
+      {:ex_doc, "~> 0.23", only: :dev, runtime: false}
     ]
   end
 

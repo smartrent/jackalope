@@ -9,6 +9,8 @@ defmodule Jackalope.TortoiseClient do
   require Logger
 
   defmodule State do
+    @moduledoc false
+
     defstruct connection: nil,
               jackalope_pid: nil,
               handler: nil,
