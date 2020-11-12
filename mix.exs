@@ -12,6 +12,7 @@ defmodule Jackalope.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       description: description(),
+      dialyzer: dialyzer(),
       docs: docs(),
       package: package(),
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -49,6 +50,12 @@ defmodule Jackalope.MixProject do
     [
       licenses: ["Apache-2.0"],
       links: %{"GitHub" => @source_url}
+    ]
+  end
+
+  defp dialyzer() do
+    [
+      flags: [:race_conditions, :unmatched_returns, :error_handling, :underspecs]
     ]
   end
 
