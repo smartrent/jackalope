@@ -1,6 +1,6 @@
 defmodule Jackalope.Handler do
   @moduledoc """
-  Behaviour defining callbacks trigged during the MQTT life-cycle
+  Behaviour defining callbacks triggered during the MQTT life-cycle
 
   The jackalope handler is stateless, so if state is needed one could
   route the messages to stateful processes, and inform the system
@@ -59,8 +59,8 @@ defmodule Jackalope.Handler do
   callback can help inform the surrounding system of errors.
 
     @impl true
-    def handle_error({:publish_error, workorder, :ttl_expired}) do
-      Logger.error("Workorder expired: \#{inspect workorder}")
+    def handle_error({:publish_error, work_order, :ttl_expired}) do
+      Logger.error("Work order expired: \#{inspect(work_order)}")
     end
 
     def handle_error(_otherwise) do

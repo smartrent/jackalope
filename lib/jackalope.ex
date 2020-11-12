@@ -50,7 +50,7 @@ defmodule Jackalope do
   - `server` (default: #{inspect(@default_mqtt_server)}) specifies the
     connection type, and its options, to use when connecting to the
     MQTT server. The default specification will attempt to connect to
-    a broker running on localhost:1883, on an unsecure
+    a broker running on localhost:1883, on an insecure
     connection. This value should only be used for testing and
     development;.
 
@@ -121,14 +121,14 @@ defmodule Jackalope do
   The `payload` will get published on `topic`. `Jackalope` will keep
   the message in a queue until we got a connection, at which point it
   will dispatch the publish. This of course present us with a problem:
-  what if we place a publish request to "unlock the frontdoor" while
+  what if we place a publish request to "unlock the front door" while
   the client is offline? We don't want to receive a message that the
-  frontdoor has been unlocked two hours later when the MQTT client
+  front door has been unlocked two hours later when the MQTT client
   reconnect; To solve that problem we have a `ttl` option we can
   specify on the publish.
 
   ```elixir
-  Jackalope.publish("doors/frontdoor", %{action: "unlock"}, ttl: 5_000)
+  Jackalope.publish("doors/front_door", %{action: "unlock"}, ttl: 5_000)
   ```
 
   Currently `ttl` is the only queue option available; to set MQTT
@@ -139,7 +139,7 @@ defmodule Jackalope do
   Jackalope.publish({"room/salon/temp", qos: 1}, %{temp: 21})
   ```
 
-  The avaialable package options are:
+  The available package options are:
 
     - `qos` (default `1`) set the quality of service of the message
       delivery; Notice that only quality of service 0 an 1 are

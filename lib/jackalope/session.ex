@@ -54,7 +54,7 @@ defmodule Jackalope.Session do
   end
 
   @doc false
-  def unsubscribe(ubsubscribe, opts \\ [])
+  def unsubscribe(unsubscribe, opts \\ [])
 
   def unsubscribe({topic_filter, unsubscribe_opts}, opts) do
     cmd = {:unsubscribe, topic_filter, unsubscribe_opts}
@@ -146,7 +146,7 @@ defmodule Jackalope.Session do
         # connection state, and the user can ask for it, so this
         # problem will go away in the future; also, as we add the
         # subscribe work-order at the front of the list, any
-        # ubsubscribe placed should come after this, making sure we
+        # unsubscribe placed should come after this, making sure we
         # will not resubscribe to a topic we are no longer interested
         # in.
         subscriptions: %{},
@@ -223,7 +223,7 @@ defmodule Jackalope.Session do
       end)
 
     # Note that we don't really concern ourselves with the order of
-    # the commands; the worklist is a list (and thus a stack) and when
+    # the commands; the work_list is a list (and thus a stack) and when
     # we retry a message it will reenter the work list at the front,
     # and it could already have messages, etc.
     work_list = [{cmd, opts} | work_list]
@@ -267,7 +267,7 @@ defmodule Jackalope.Session do
     {:noreply, state}
   end
 
-  # reductive case, consume work untill the work list is empty
+  # reductive case, consume work until the work list is empty
   def handle_continue(
         :consume_work_list,
         %State{
