@@ -3,7 +3,7 @@ defmodule JackalopeTest do
   doctest Jackalope
 
   alias JackalopeTest.ScriptedMqttServer, as: MqttServer
-  alias Tortoise.{Package, Transport}
+  alias Tortoise.Package
 
   setup context do
     {:ok, mqtt_server_pid} = start_supervised(MqttServer)
