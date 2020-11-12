@@ -40,10 +40,10 @@ defmodule Jackalope do
 
   - `handler` (default: `Jackalope.Handler.Logger`) specifies the
     module implementing the callbacks (implementing
-    `Jackalope.Handler` behaviour) to use. This is where you can
-    configure how Jackalope reacts to events in the connection
-    life-cycle, including what to do when receiving a message on a
-    subscribed topic filter; read the documentation for
+    `Jackalope.Handler` behaviour) to use. This module reacts to
+    the events Jackalope communicates about the connection
+    life-cycle, including receiving a message on a
+    subscribed topic filter. Read the documentation for
     `Jackalope.Handler` for more information on the events and
     callbacks.
 
