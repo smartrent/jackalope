@@ -61,6 +61,7 @@ defmodule Jackalope.MixProject do
 
   defp docs do
     [
+      extras: ["CHANGELOG.md"],
       source_ref: "v#{@version}",
       source_url: @source_url
     ]
