@@ -43,7 +43,7 @@ defmodule Jackalope.MixProject do
   end
 
   defp description do
-    "A sample Tortoise client application"
+    "An opinionated MQTT client library based on Tortoise MQTT"
   end
 
   defp package do
