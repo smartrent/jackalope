@@ -12,8 +12,14 @@ defmodule Jackalope.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       description: description(),
+      docs: docs(),
       package: package(),
-      elixirc_paths: elixirc_paths(Mix.env())
+      elixirc_paths: elixirc_paths(Mix.env()),
+      preferred_cli_env: %{
+        docs: :docs,
+        "hex.publish": :docs,
+        "hex.build": :docs
+      }
     ]
   end
 
@@ -30,7 +36,8 @@ defmodule Jackalope.MixProject do
     [
       {:tortoise, "~> 0.9"},
       {:jason, "~> 1.1"},
-      {:dialyxir, "~> 1.0.0", only: [:test, :dev], runtime: false}
+      {:dialyxir, "~> 1.0.0", only: [:test, :dev], runtime: false},
+      {:ex_doc, "~> 0.22", only: :docs, runtime: false}
     ]
   end
 
@@ -42,6 +49,13 @@ defmodule Jackalope.MixProject do
     [
       licenses: ["Apache-2.0"],
       links: %{"GitHub" => @source_url}
+    ]
+  end
+
+  defp docs do
+    [
+      source_ref: "v#{@version}",
+      source_url: @source_url
     ]
   end
 end
