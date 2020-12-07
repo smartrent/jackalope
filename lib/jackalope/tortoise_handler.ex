@@ -51,11 +51,11 @@ defmodule Jackalope.TortoiseHandler do
         apply(handler, :handle_message, [topic_levels, payload])
         {:ok, state}
 
-      {:error, _reason} ->
+      {:error, reason} ->
         # Dispatch to the handle error callback on the jackalope handler if
         # implemented
         if function_exported?(handler, :handle_error, 1) do
-          reason = {:payload_decode_error, {topic_levels, payload_string}}
+          reason = {:payload_decode_error, reason, {topic_levels, payload_string}}
           apply(handler, :handle_error, [reason])
         end
 
