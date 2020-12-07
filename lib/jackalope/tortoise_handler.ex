@@ -44,18 +44,18 @@ defmodule Jackalope.TortoiseHandler do
   end
 
   @impl true
-  def handle_message(topic, payload_string, %State{handler: handler} = state) do
+  def handle_message(topic_levels, payload_string, %State{handler: handler} = state) do
     case Jason.decode(payload_string) do
       {:ok, payload} ->
         # Dispatch to the handle message callback on the jackalope handler
-        apply(handler, :handle_message, [topic, payload])
+        apply(handler, :handle_message, [topic_levels, payload])
         {:ok, state}
 
       {:error, _reason} ->
         # Dispatch to the handle error callback on the jackalope handler if
         # implemented
         if function_exported?(handler, :handle_error, 1) do
-          reason = {:payload_decode_error, {topic, payload_string}}
+          reason = {:payload_decode_error, {topic_levels, payload_string}}
           apply(handler, :handle_error, [reason])
         end
 
