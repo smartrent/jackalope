@@ -69,9 +69,9 @@ defmodule Jackalope.Session do
   @doc false
   def publish(topic_and_opts, payload, opts \\ [])
 
-  def publish({topic, publish_opts}, payload, opts) when is_list(topic) do
+  def publish({topic_levels, publish_opts}, payload, opts) when is_list(topic_levels) do
     # normalize the topic list, should be a string
-    topic = Enum.join(topic, "/")
+    topic = Enum.join(topic_levels, "/")
     publish({topic, publish_opts}, payload, opts)
   end
 

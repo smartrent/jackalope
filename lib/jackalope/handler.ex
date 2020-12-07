@@ -11,6 +11,7 @@ defmodule Jackalope.Handler do
 
   @type topic :: Tortoise.topic()
   @type topic_filter :: Tortoise.topic_filter()
+  @type topic_levels :: [String.t()]
   @type payload :: term()
 
   @doc """
@@ -48,7 +49,7 @@ defmodule Jackalope.Handler do
   optional `handle_error/1` callback would have been triggered
   instead.
   """
-  @callback handle_message([topic], payload) :: any()
+  @callback handle_message(topic_levels, payload) :: any()
 
   @doc """
   Handle errors produced by Jackalope that should be reacted to
@@ -72,7 +73,7 @@ defmodule Jackalope.Handler do
   """
   @callback handle_error(reason) :: any()
             when reason:
-                   {:payload_decode_error, {topic, payload_string :: String.t()}}
+                   {:payload_decode_error, {topic_levels, payload_string :: String.t()}}
                    | {:publish_error, {topic, payload, opts}, error_reason :: term}
                    | {:publish_error, jackalope_work_order :: term, :ttl_expired},
                  opts: Keyword.t()
