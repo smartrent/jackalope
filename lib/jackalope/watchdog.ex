@@ -85,7 +85,6 @@ defmodule Jackalope.Watchdog do
   defp ping_tortoise(client_id, timeout) do
     case Tortoise.Connection.ping_sync(client_id, timeout) do
       {:ok, _latency} ->
-        Logger.info("[Jackalope] Watchdog - Connection to MQTT broker is alive")
         :ok
 
       {:error, reason} ->
