@@ -26,7 +26,7 @@ Jackalope aims to make an interface that:
   set
 
 - Makes it easy to connect to AWS IoT with the correct encryption
-  enabled
+  enabled (Coming soon!)
 
 Besides this Jackalope aims to provide helpers for local testing,
 allowing you to test your application without having a connection to
