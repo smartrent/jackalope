@@ -7,16 +7,25 @@ defmodule Jackalope.TortoiseHandler do
 
   alias __MODULE__, as: State
 
-  defstruct jackalope_pid: nil, handler: nil
+  defstruct jackalope_pid: nil, handler: nil, default_last_will: nil
 
   @impl true
   def init(opts) do
     initial_state = %State{
       handler: Keyword.fetch!(opts, :handler),
-      jackalope_pid: Keyword.fetch!(opts, :jackalope_pid)
+      jackalope_pid: Keyword.fetch!(opts, :jackalope_pid),
+      default_last_will: Keyword.get(opts, :last_will)
     }
 
     {:ok, initial_state}
+  end
+
+  @impl true
+  def last_will(%State{} = state) do
+    last_will = apply(state.handler, :last_will, []) || state.default_last_will
+    packaged_last_will = package_last_will(last_will)
+
+    {{:ok, packaged_last_will}, state}
   end
 
   @impl true
@@ -68,4 +77,22 @@ defmodule Jackalope.TortoiseHandler do
     Logger.info("[Jackalope] Tortoise reports termination")
     :ok
   end
+
+  defp package_last_will(last_will) do
+    if last_will != nil do
+      payload_term = Keyword.get(last_will, :payload)
+
+      %Tortoise.Package.Publish{
+        topic: Keyword.fetch!(last_will, :topic),
+        payload: encode_last_will_payload(payload_term),
+        qos: Keyword.get(last_will, :qos, 0),
+        retain: false
+      }
+    else
+      nil
+    end
+  end
+
+  defp encode_last_will_payload(nil), do: nil
+  defp encode_last_will_payload(term), do: Jason.encode!(term)
 end

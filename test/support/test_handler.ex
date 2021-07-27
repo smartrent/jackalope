@@ -26,4 +26,10 @@ defmodule JackalopeTest.TestHandler do
     IO.inspect(error, label: __MODULE__.HANDLE_ERROR)
     :ok
   end
+
+  @impl true
+  def last_will() do
+    IO.inspect("No update to last will", label: __MODULE__.LAST_WILL)
+    nil
+  end
 end

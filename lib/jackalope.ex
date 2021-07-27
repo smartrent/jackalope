@@ -92,7 +92,8 @@ defmodule Jackalope do
        [
          handler: jackalope_handler,
          client_id: client_id,
-         connection_options: connection_options(opts)
+         connection_options: connection_options(opts),
+         last_will: Keyword.get(opts, :last_will)
        ]}
     ]
 
@@ -208,26 +209,9 @@ defmodule Jackalope do
 
     [
       server: server,
-      will: last_will(Keyword.get(opts, :last_will)),
       backoff: [min_interval: 100, max_interval: 30_000]
     ]
   end
-
-  defp last_will(last_will) do
-    if last_will do
-      payload_term = Keyword.get(last_will, :payload, nil)
-
-      %Tortoise.Package.Publish{
-        topic: Keyword.fetch!(last_will, :topic),
-        payload: encode_last_will_payload(payload_term),
-        qos: Keyword.get(last_will, :qos, 0),
-        retain: false
-      }
-    end
-  end
-
-  defp encode_last_will_payload(nil), do: nil
-  defp encode_last_will_payload(term), do: Jason.encode!(term)
 
   # Pass normal Tortoise transports through as is; assume that the
   # configuration is correct!

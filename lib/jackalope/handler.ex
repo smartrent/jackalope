@@ -13,6 +13,7 @@ defmodule Jackalope.Handler do
   @type topic_filter :: Tortoise.topic_filter()
   @type topic_levels :: [String.t()]
   @type payload :: term()
+  @type last_will :: [topic: topic, payload: payload, qos: non_neg_integer()]
 
   @doc """
   Called when the MQTT connection changes status
@@ -23,6 +24,12 @@ defmodule Jackalope.Handler do
   means that the connection has been dropped.
   """
   @callback connection(status :: :up | :down) :: any()
+
+  @doc """
+  Produces the last will message for the current connection, or nil if the last will in the connection options is to be used
+  Example: [topic: hub_serial_number/message", payload: %{code: "going_down", msg: "Last will message"}, qos: 1]
+  """
+  @callback last_will() :: last_will | nil
 
   @doc """
   Called when a topic filter subscription state changes
