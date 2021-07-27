@@ -29,4 +29,7 @@ defmodule Jackalope.Handler.Logger do
   def handle_error(reason) do
     Logger.warn("Something bad happened: #{inspect(reason)}")
   end
+
+  @impl true
+  def last_will(), do: nil
 end

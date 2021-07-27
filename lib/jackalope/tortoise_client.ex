@@ -17,6 +17,7 @@ defmodule Jackalope.TortoiseClient do
               client_id: nil,
               connection_options: [],
               publish_timeout: 30_000,
+              last_will: nil,
               # at least once
               default_qos: 1
   end
@@ -101,13 +102,18 @@ defmodule Jackalope.TortoiseClient do
 
   @impl true
   def handle_continue(:spawn_connection, %State{connection: nil} = state) do
-    Logger.info("[Jackalope] Spawning Tortoise connection")
     # Attempt to spawn a tortoise connection to the MQTT server; the
     # tortoise will attempt to connect to the server, so we are not
     # fully up once we got the process
+    handler_opts = [
+      handler: state.handler,
+      jackalope_pid: state.jackalope_pid,
+      last_will: state.last_will
+    ]
+
     tortoise_handler = {
       Jackalope.TortoiseHandler,
-      handler: state.handler, jackalope_pid: state.jackalope_pid
+      handler_opts
     }
 
     conn_opts =
