@@ -22,6 +22,9 @@ jobs:
       - run: mix docs
       - run: mix hex.build
       - run: mix test
+      - run: mix format --check-formatted
+      - run: mix credo -a
+      # - run: mix credo --strict
       - run: mix dialyzer
       - save_cache:
           key: v1-mix-cache-{{ checksum "mix.lock" }}
@@ -36,7 +39,6 @@ jobs:
       - checkout
       - <<: *install_hex_rebar
       - run: mix deps.get
-      - run: mix format --check-formatted
       - run: mix compile
       - run: mix test
 

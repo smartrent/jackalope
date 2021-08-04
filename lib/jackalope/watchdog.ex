@@ -25,7 +25,7 @@ defmodule Jackalope.Watchdog do
 
   @doc "Whether the MQTT connection is live"
   @spec mqtt_alive?() :: boolean
-  def mqtt_alive? do
+  def mqtt_alive?() do
     GenServer.call(__MODULE__, :alive?)
   end
 

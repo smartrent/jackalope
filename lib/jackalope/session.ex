@@ -40,7 +40,7 @@ defmodule Jackalope.Session do
     cmd = {:subscribe, topic_filter, subscribe_opts}
 
     cond do
-      not (Keyword.get(subscribe_opts, :qos, 0) in [0, 1]) ->
+      Keyword.get(subscribe_opts, :qos, 0) not in [0, 1] ->
         {:error, :unsupported_qos}
 
       _opts_looks_good! = true ->
@@ -85,7 +85,7 @@ defmodule Jackalope.Session do
 
     # Ensure the opts passed to the publish are allowed by AWS IoT
     cond do
-      not (Keyword.get(publish_opts, :qos, 0) in [0, 1]) ->
+      Keyword.get(publish_opts, :qos, 0) not in [0, 1] ->
         {:error, :unsupported_qos}
 
       Keyword.get(publish_opts, :retain, false) == true ->

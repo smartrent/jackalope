@@ -5,7 +5,7 @@ defmodule Jackalope.Supervisor do
 
   use Supervisor
   require Logger
-  alias Jackalope.{Watchdog, TortoiseClient}
+  alias Jackalope.{TortoiseClient, Watchdog}
 
   @type init_arg ::
           {:app_handler, module()} | {:client_id, atom()} | {:connection_options, Keyword.t()}
