@@ -25,6 +25,7 @@ defmodule Jackalope.Session do
 
   def start_link(opts) do
     Logger.info("[Jackalope] Starting #{inspect(__MODULE__)}...")
+    open_disk_logs()
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
@@ -222,11 +223,16 @@ defmodule Jackalope.Session do
         ttl when is_integer(ttl) -> System.monotonic_time(:millisecond) + ttl
       end)
 
+    IO.inspect("GET HERE TWICE?")
     # Note that we don't really concern ourselves with the order of
     # the commands; the work_list is a list (and thus a stack) and when
     # we retry a message it will reenter the work list at the front,
     # and it could already have messages, etc.
     work_list = [{cmd, opts} | work_list]
+    :ok = update_disk_logs(work_list)
+    IO.inspect(get_worklist_from_log(:newworklist), label: "The value of :new_worklist after update disk log")
+    # IO.inspect(get_worklist_from_log(:oldworklist), label: "The value of :old_worklist after update disk log")
+    IO.inspect("FIND ME")
     state = %State{state | work_list: work_list}
     {:noreply, state, {:continue, :consume_work_list}}
   end
@@ -278,7 +284,8 @@ defmodule Jackalope.Session do
       ) do
     state = %State{state | work_list: remaining}
     ttl = Keyword.get(opts, :ttl, :infinity)
-
+    IO.inspect("FIND ME IN CONSUME WORK LIST")
+    IO.inspect(work_order, label: "work order currently being consumed")
     if ttl > System.monotonic_time(:millisecond) do
       case execute_work(cmd) do
         :ok ->
@@ -302,6 +309,48 @@ defmodule Jackalope.Session do
 
       {:noreply, state, {:continue, :consume_work_list}}
     end
+  end
+
+  ### DISK LOG HELPERS --------------------------------------------------
+  def open_disk_logs() do
+    :disk_log.open([{:name, :oldworklist}, {:mode, :read_write}])
+    :disk_log.open([{:name, :newworklist}, {:mode, :read_write}])
+  end
+
+  def update_disk_logs(new_values) do
+    transfer_values_to_backup_worklist()
+    update_worklist(:newworklist, new_values)
+  end
+
+  def transfer_values_to_backup_worklist() do
+    case :disk_log.chunk(:newworklist, :start) do
+      :eof -> IO.inspect("empty worklist, transfer ignored")
+      {:error, reason} -> IO.inspect(reason, label: "failed due to")
+      {_continuation, [worklist_values]} -> update_worklist(:oldworklist, worklist_values)
+    end
+
+    # {_continuation, [values]} = :disk_log.chunk(worklist_current, :start)
+    # IO.inspect(values, label: "values being transferred")
+    # update_worklist(worklist_other, values)
+  end
+
+  def update_worklist(backup_worklist, value) do
+    :disk_log.truncate(backup_worklist)
+    :disk_log.blog(backup_worklist, :erlang.term_to_binary(value))
+  end
+
+  def get_worklist_from_log(backup_worklist) do
+    {_, worklist_values} = :disk_log.chunk(backup_worklist, :start)
+    worklist_values
+  end
+
+  def clear_disk_logs() do
+    :disk_log.open([{:name, :oldworklist}, {:mode, :read_write}])
+    :disk_log.open([{:name, :newworklist}, {:mode, :read_write}])
+    :disk_log.truncate(:newworklist)
+    :disk_log.truncate(:oldworklist)
+    :disk_log.close(:newworklist)
+    :disk_log.close(:oldworklist)
   end
 
   ### PRIVATE HELPERS --------------------------------------------------

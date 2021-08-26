@@ -4,12 +4,53 @@ defmodule JackalopeTest do
 
   alias JackalopeTest.ScriptedMqttServer, as: MqttServer
   alias Tortoise.Package
+  alias Jackalope.Session
 
   setup context do
     {:ok, mqtt_server_pid} = start_supervised(MqttServer)
     Process.link(mqtt_server_pid)
     client_id = Atom.to_string(context.test)
     {:ok, [client_id: client_id, mqtt_server_pid: mqtt_server_pid]}
+  end
+
+  describe "persist on disk_log" do
+    test "open two disk logs" do
+      Session.open_disk_logs()
+      logs = :disk_log.all()
+      assert length(logs) == 2
+    end
+
+    test "setup and update disk logs" do
+      Session.open_disk_logs()
+      Session.update_worklist(:newworklist, "hello")
+      assert Session.get_worklist_from_log(:newworklist) == ["hello"]
+
+      Session.update_disk_logs("bye")
+      assert Session.get_worklist_from_log(:newworklist) == ["bye"]
+      assert Session.get_worklist_from_log(:oldworklist) == ["hello"]
+    end
+
+    test "setup and update disk logs with real values" do
+      Session.open_disk_logs()
+      Session.update_worklist(:newworklist, {{:publish, "mytopic", %{"msg" => "hello"}, [qos: 0]}, [ttl: :infinity]})
+      assert Session.get_worklist_from_log(:newworklist) == [{{:publish, "mytopic", %{"msg" => "hello"}, [qos: 0]}, [ttl: :infinity]}]
+
+      Session.update_disk_logs({{:publish, "mytopic", %{"msg" => "bye"}, [qos: 0]}, [ttl: :infinity]})
+      assert Session.get_worklist_from_log(:newworklist) == [{{:publish, "mytopic", %{"msg" => "bye"}, [qos: 0]}, [ttl: :infinity]}]
+      assert Session.get_worklist_from_log(:oldworklist) == [{{:publish, "mytopic", %{"msg" => "hello"}, [qos: 0]}, [ttl: :infinity]}]
+    end
+
+    test "disk log with one command (publish with QoS=0)", context do
+      Session.clear_disk_logs()
+
+      _ = connect(context)
+      assert :ok = Jackalope.publish({"mytopic", qos: 0}, %{"msg" => "hello"})
+      assert :ok = Jackalope.publish({"mytopic2", qos: 0}, %{"msg" => "ummm hi"})
+
+      assert Session.get_worklist_from_log(:newworklist) == [[{{:publish, "mytopic2", %{"msg" => "ummm hi"}, [qos: 0]}, [ttl: :infinity]}, {{:publish, "mytopic", %{"msg" => "hello"}, [qos: 0]}, [ttl: :infinity]}]]
+      assert Session.get_worklist_from_log(:oldworklist) == [[{{:publish, "mytopic", %{"msg" => "hello"}, [qos: 0]}, [ttl: :infinity]}]]
+    end
+
   end
 
   describe "start_link/1" do
