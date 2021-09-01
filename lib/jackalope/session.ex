@@ -113,10 +113,12 @@ defmodule Jackalope.Session do
     # Produce subscription commands for the initial subscriptions
     initial_topics = Keyword.get(opts, :initial_topics)
 
-    work_list =
+    subscriptions =
       for topic_filter <- List.wrap(initial_topics),
           do: {{:subscribe, topic_filter, []}, []}
 
+    work_list = Enum.concat(get_worklist_from_log(:newworklist), subscriptions)
+    IO.inspect(work_list, label: "THESE ARE THE WORK_LIST ITEMS (ie the new value)")
     initial_state = %State{work_list: work_list, handler: handler}
 
     {:ok, initial_state, {:continue, :consume_work_list}}
@@ -172,6 +174,8 @@ defmodule Jackalope.Session do
       ) do
     {work_order, pending} = Map.pop(pending, ref)
     state = %State{state | pending: pending}
+    IO.inspect(work_order, label: "WORK ORDER FORMAT")
+    IO.inspect(pending, label: "PENDING FORMAT")
 
     case res do
       _unknown_ref when is_nil(work_order) ->
@@ -223,16 +227,14 @@ defmodule Jackalope.Session do
         ttl when is_integer(ttl) -> System.monotonic_time(:millisecond) + ttl
       end)
 
-    IO.inspect("GET HERE TWICE?")
     # Note that we don't really concern ourselves with the order of
     # the commands; the work_list is a list (and thus a stack) and when
     # we retry a message it will reenter the work list at the front,
     # and it could already have messages, etc.
     work_list = [{cmd, opts} | work_list]
+    IO.inspect(work_list, label: "worklist right before update disk log")
     :ok = update_disk_logs(work_list)
-    IO.inspect(get_worklist_from_log(:newworklist), label: "The value of :new_worklist after update disk log")
-    # IO.inspect(get_worklist_from_log(:oldworklist), label: "The value of :old_worklist after update disk log")
-    IO.inspect("FIND ME")
+    # IO.inspect(get_worklist_from_log(:newworklist), label: "The value of :newworklist after update disk log")
     state = %State{state | work_list: work_list}
     {:noreply, state, {:continue, :consume_work_list}}
   end
@@ -264,12 +266,14 @@ defmodule Jackalope.Session do
   @impl true
   def handle_continue(:consume_work_list, %State{connection_status: :offline} = state) do
     # postpone consuming from the work list till we are online again!
+    IO.puts("OFFLINE. No continuation")
     {:noreply, state}
   end
 
   def handle_continue(:consume_work_list, %State{work_list: []} = state) do
     # base-case; we are done consuming and will idle until more work
     # is produced
+    IO.puts("EMPTY WORK LIST. No continuation")
     {:noreply, state}
   end
 
@@ -284,8 +288,9 @@ defmodule Jackalope.Session do
       ) do
     state = %State{state | work_list: remaining}
     ttl = Keyword.get(opts, :ttl, :infinity)
-    IO.inspect("FIND ME IN CONSUME WORK LIST")
+
     IO.inspect(work_order, label: "work order currently being consumed")
+
     if ttl > System.monotonic_time(:millisecond) do
       case execute_work(cmd) do
         :ok ->
@@ -313,13 +318,18 @@ defmodule Jackalope.Session do
 
   ### DISK LOG HELPERS --------------------------------------------------
   def open_disk_logs() do
-    :disk_log.open([{:name, :oldworklist}, {:mode, :read_write}])
-    :disk_log.open([{:name, :newworklist}, {:mode, :read_write}])
+    {:ok, _} = :disk_log.open([{:name, :oldworklist}, {:mode, :read_write}])
+    {:ok, _} = :disk_log.open([{:name, :newworklist}, {:mode, :read_write}])
   end
 
   def update_disk_logs(new_values) do
     transfer_values_to_backup_worklist()
-    update_worklist(:newworklist, new_values)
+    if is_list(new_values) do
+      [values] = new_values
+      update_worklist(:newworklist, values)
+    else
+      update_worklist(:newworklist, new_values)
+    end
   end
 
   def transfer_values_to_backup_worklist() do
@@ -328,20 +338,22 @@ defmodule Jackalope.Session do
       {:error, reason} -> IO.inspect(reason, label: "failed due to")
       {_continuation, [worklist_values]} -> update_worklist(:oldworklist, worklist_values)
     end
-
-    # {_continuation, [values]} = :disk_log.chunk(worklist_current, :start)
-    # IO.inspect(values, label: "values being transferred")
-    # update_worklist(worklist_other, values)
   end
 
   def update_worklist(backup_worklist, value) do
-    :disk_log.truncate(backup_worklist)
-    :disk_log.blog(backup_worklist, :erlang.term_to_binary(value))
+    :ok = :disk_log.truncate(backup_worklist)
+    :ok = :disk_log.blog(backup_worklist, :erlang.term_to_binary(value))
   end
 
+  #ideas
+  #second update?
+  
+
   def get_worklist_from_log(backup_worklist) do
-    {_, worklist_values} = :disk_log.chunk(backup_worklist, :start)
-    worklist_values
+    case :disk_log.chunk(backup_worklist, :start) do
+      {_, worklist_values} -> List.wrap(worklist_values)
+      :eof -> []
+     end
   end
 
   def clear_disk_logs() do

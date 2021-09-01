@@ -28,6 +28,8 @@ defmodule JackalopeTest do
       Session.update_disk_logs("bye")
       assert Session.get_worklist_from_log(:newworklist) == ["bye"]
       assert Session.get_worklist_from_log(:oldworklist) == ["hello"]
+
+      Session.clear_disk_logs()
     end
 
     test "setup and update disk logs with real values" do
@@ -38,6 +40,8 @@ defmodule JackalopeTest do
       Session.update_disk_logs({{:publish, "mytopic", %{"msg" => "bye"}, [qos: 0]}, [ttl: :infinity]})
       assert Session.get_worklist_from_log(:newworklist) == [{{:publish, "mytopic", %{"msg" => "bye"}, [qos: 0]}, [ttl: :infinity]}]
       assert Session.get_worklist_from_log(:oldworklist) == [{{:publish, "mytopic", %{"msg" => "hello"}, [qos: 0]}, [ttl: :infinity]}]
+
+      Session.clear_disk_logs()
     end
 
     test "disk log with one command (publish with QoS=0)", context do
@@ -47,8 +51,11 @@ defmodule JackalopeTest do
       assert :ok = Jackalope.publish({"mytopic", qos: 0}, %{"msg" => "hello"})
       assert :ok = Jackalope.publish({"mytopic2", qos: 0}, %{"msg" => "ummm hi"})
 
-      assert Session.get_worklist_from_log(:newworklist) == [[{{:publish, "mytopic2", %{"msg" => "ummm hi"}, [qos: 0]}, [ttl: :infinity]}, {{:publish, "mytopic", %{"msg" => "hello"}, [qos: 0]}, [ttl: :infinity]}]]
-      assert Session.get_worklist_from_log(:oldworklist) == [[{{:publish, "mytopic", %{"msg" => "hello"}, [qos: 0]}, [ttl: :infinity]}]]
+      Process.sleep(1000)
+      assert Session.get_worklist_from_log(:newworklist) == [{{:publish, "mytopic2", %{"msg" => "ummm hi"}, [qos: 0]}, [ttl: :infinity]}, {{:publish, "mytopic", %{"msg" => "hello"}, [qos: 0]}, [ttl: :infinity]}]
+      assert Session.get_worklist_from_log(:oldworklist) == [{{:publish, "mytopic", %{"msg" => "hello"}, [qos: 0]}, [ttl: :infinity]}]
+
+      Session.clear_disk_logs()
     end
 
   end
@@ -72,6 +79,8 @@ defmodule JackalopeTest do
       assert_receive {MqttServer, :completed}, 200
 
       assert %{subscriptions: %{}} = Jackalope.Session.status()
+
+      Session.clear_disk_logs()
     end
 
     test "connect to a MQTT server with initial subscribe topics (tcp)", context do
@@ -80,6 +89,8 @@ defmodule JackalopeTest do
       {:ok, _pid} = connect(context, initial_topics: ["foo/bar"])
       {:ok, subscribe} = expect_subscribe(context, [{"foo/bar", 1}])
       :ok = acknowledge_subscribe(context, subscribe, [{:ok, 1}])
+
+      Session.clear_disk_logs()
     end
   end
 
@@ -99,6 +110,8 @@ defmodule JackalopeTest do
       # this is what the server received
       assert %Package.Publish{topic: "foo", qos: 0, payload: payload} = flush.()
       assert expected_payload == Jason.decode!(payload)
+
+      Session.clear_disk_logs()
     end
 
     test "publish with QoS=1", context do
@@ -117,10 +130,13 @@ defmodule JackalopeTest do
       assert received_publish = flush.()
       assert %Package.Publish{topic: "foo", qos: 1} = received_publish
       assert expected_payload == Jason.decode!(received_publish.payload)
+
+      Session.clear_disk_logs()
     end
 
     test "publish with QoS=2 should not be allowed", _context do
       assert {:error, :unsupported_qos} = Jackalope.publish({"foo/bar", qos: 2}, nil)
+      Session.clear_disk_logs()
     end
   end
 
@@ -130,6 +146,7 @@ defmodule JackalopeTest do
       assert :ok = Jackalope.subscribe({"foo/bar", qos: 0})
       {:ok, subscribe} = expect_subscribe(context, [{"foo/bar", 0}])
       :ok = acknowledge_subscribe(context, subscribe, [{:ok, 0}])
+      Session.clear_disk_logs()
     end
 
     test "subscribe to a topic filter with QoS=1", context do
@@ -137,6 +154,7 @@ defmodule JackalopeTest do
       assert :ok = Jackalope.subscribe({"foo/bar", qos: 1})
       {:ok, subscribe} = expect_subscribe(context, [{"foo/bar", 1}])
       :ok = acknowledge_subscribe(context, subscribe, [{:ok, 1}])
+      Session.clear_disk_logs()
     end
   end
 
@@ -146,6 +164,7 @@ defmodule JackalopeTest do
       assert :ok = Jackalope.unsubscribe("foo/bar")
       {:ok, unsubscribe} = expect_unsubscribe(context, ["foo/bar"])
       :ok = acknowledge_unsubscribe(context, unsubscribe)
+      Session.clear_disk_logs()
     end
   end
 
