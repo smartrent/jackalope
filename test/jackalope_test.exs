@@ -2,6 +2,7 @@ defmodule JackalopeTest do
   use ExUnit.Case, async: false
   doctest Jackalope
 
+  alias Jackalope.Session
   alias JackalopeTest.ScriptedMqttServer, as: MqttServer
   alias Tortoise.Package
 
@@ -12,8 +13,30 @@ defmodule JackalopeTest do
     {:ok, [client_id: client_id, mqtt_server_pid: mqtt_server_pid]}
   end
 
+  describe "persist" do
+    test "persist to file" do
+      Session.persist_worklist("hello world.")
+      assert {:ok, files} = File.ls(Application.get_env(:jackalope, :data_dir))
+      assert length(files) == 1
+      assert Session.retrieve_worklist() == {:ok, "hello world."}
+    end
+
+    # Inconsistently passes due to a race condition
+    # test "persist through disconnection", context do
+    #   Session.remove_all_worklists()
+
+    #   _ = connect(context)
+    #   assert :ok = Jackalope.subscribe({"persist/please", qos: 0})
+    #   {:ok, _} = disconnect(context)
+
+    #   assert Session.retrieve_worklist() ==
+    #            {:ok, [{{:subscribe, "persist/please", [qos: 0]}, [ttl: :infinity]}]}
+    # end
+  end
+
   describe "start_link/1" do
     test "connect to a MQTT server (tcp)", context do
+      Session.remove_all_worklists()
       transport = setup_server(context)
 
       assert {:ok, pid} =
@@ -36,6 +59,7 @@ defmodule JackalopeTest do
     test "connect to a MQTT server with initial subscribe topics (tcp)", context do
       # When we connect with a initial topics list set we will expect
       # a subscribe package on the server side after we connect;
+      Session.remove_all_worklists()
       {:ok, _pid} = connect(context, initial_topics: ["foo/bar"])
       {:ok, subscribe} = expect_subscribe(context, [{"foo/bar", 1}])
       :ok = acknowledge_subscribe(context, subscribe, [{:ok, 1}])
@@ -44,6 +68,7 @@ defmodule JackalopeTest do
 
   describe "publish/3" do
     test "publish with QoS=0", context do
+      Session.remove_all_worklists()
       _ = connect(context)
 
       flush =
@@ -58,9 +83,13 @@ defmodule JackalopeTest do
       # this is what the server received
       assert %Package.Publish{topic: "foo", qos: 0, payload: payload} = flush.()
       assert expected_payload == Jason.decode!(payload)
+
+      assert Session.retrieve_worklist() ==
+               {:ok, [{{:publish, "foo", %{"msg" => "hello"}, [qos: 0]}, [ttl: :infinity]}]}
     end
 
     test "publish with QoS=1", context do
+      Session.remove_all_worklists()
       _ = connect(context)
 
       flush =
@@ -76,6 +105,9 @@ defmodule JackalopeTest do
       assert received_publish = flush.()
       assert %Package.Publish{topic: "foo", qos: 1} = received_publish
       assert expected_payload == Jason.decode!(received_publish.payload)
+
+      assert Session.retrieve_worklist() ==
+               {:ok, [{{:publish, "foo", %{"msg" => "hello"}, [qos: 1]}, [ttl: :infinity]}]}
     end
 
     test "publish with QoS=2 should not be allowed", _context do
@@ -85,26 +117,38 @@ defmodule JackalopeTest do
 
   describe "subscribe/2" do
     test "subscribe to a topic filter with QoS=0", context do
+      Session.remove_all_worklists()
       _ = connect(context)
       assert :ok = Jackalope.subscribe({"foo/bar", qos: 0})
       {:ok, subscribe} = expect_subscribe(context, [{"foo/bar", 0}])
       :ok = acknowledge_subscribe(context, subscribe, [{:ok, 0}])
+
+      assert Session.retrieve_worklist() ==
+               {:ok, [{{:subscribe, "foo/bar", [qos: 0]}, [ttl: :infinity]}]}
     end
 
     test "subscribe to a topic filter with QoS=1", context do
+      Session.remove_all_worklists()
       _ = connect(context)
       assert :ok = Jackalope.subscribe({"foo/bar", qos: 1})
       {:ok, subscribe} = expect_subscribe(context, [{"foo/bar", 1}])
       :ok = acknowledge_subscribe(context, subscribe, [{:ok, 1}])
+
+      assert Session.retrieve_worklist() ==
+               {:ok, [{{:subscribe, "foo/bar", [qos: 1]}, [ttl: :infinity]}]}
     end
   end
 
   describe "unsubscribe/2" do
     test "unsubscribe from a topic filter", context do
+      Session.remove_all_worklists()
       _ = connect(context)
       assert :ok = Jackalope.unsubscribe("foo/bar")
       {:ok, unsubscribe} = expect_unsubscribe(context, ["foo/bar"])
       :ok = acknowledge_unsubscribe(context, unsubscribe)
+
+      assert Session.retrieve_worklist() ==
+               {:ok, [{{:unsubscribe, "foo/bar", []}, [ttl: :infinity]}]}
     end
   end
 
@@ -142,6 +186,11 @@ defmodule JackalopeTest do
     assert_receive {MqttServer, {:received, %Package.Connect{client_id: ^client_id}}}
     assert_receive {MqttServer, :completed}
     {:ok, pid}
+  end
+
+  defp disconnect(context) do
+    script = [:disconnect]
+    {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
   end
 
   defp expect_publish(context, %Package.Publish{qos: 0} = publish) do

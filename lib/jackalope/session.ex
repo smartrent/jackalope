@@ -17,6 +17,8 @@ defmodule Jackalope.Session do
   alias __MODULE__, as: State
   alias Jackalope.TortoiseClient
 
+  @version 1
+
   defstruct connection_status: :offline,
             handler: nil,
             work_list: [],
@@ -112,9 +114,12 @@ defmodule Jackalope.Session do
     # Produce subscription commands for the initial subscriptions
     initial_topics = Keyword.get(opts, :initial_topics)
 
-    work_list =
+    subscriptions =
       for topic_filter <- List.wrap(initial_topics),
           do: {{:subscribe, topic_filter, []}, []}
+
+    {:ok, saved_work_list} = retrieve_worklist()
+    work_list = Enum.concat(saved_work_list, subscriptions)
 
     initial_state = %State{work_list: work_list, handler: handler}
 
@@ -151,13 +156,15 @@ defmodule Jackalope.Session do
         # in.
         subscriptions: %{},
         work_list:
-          Enum.concat([
-            for(
-              {topic_filter, opts} <- state.subscriptions,
-              do: {{:subscribe, topic_filter, opts}, []}
-            ),
-            state.work_list
-          ])
+          persist_worklist(
+            Enum.concat([
+              for(
+                {topic_filter, opts} <- state.subscriptions,
+                do: {{:subscribe, topic_filter, opts}, []}
+              ),
+              state.work_list
+            ])
+          )
     }
 
     {:noreply, state}
@@ -227,7 +234,7 @@ defmodule Jackalope.Session do
     # we retry a message it will reenter the work list at the front,
     # and it could already have messages, etc.
     work_list = [{cmd, opts} | work_list]
-    state = %State{state | work_list: work_list}
+    state = %State{state | work_list: persist_worklist(work_list)}
     {:noreply, state, {:continue, :consume_work_list}}
   end
 
@@ -243,13 +250,15 @@ defmodule Jackalope.Session do
         # unsubscribes should be idempotent
         pending: %{},
         work_list:
-          Enum.concat([
-            for(
-              {ref, work_order} when is_reference(ref) <- state.pending,
-              do: work_order
-            ),
-            state.work_list
-          ])
+          persist_worklist(
+            Enum.concat([
+              for(
+                {ref, work_order} when is_reference(ref) <- state.pending,
+                do: work_order
+              ),
+              state.work_list
+            ])
+          )
     }
 
     {:noreply, state}
@@ -303,6 +312,91 @@ defmodule Jackalope.Session do
       {:noreply, state, {:continue, :consume_work_list}}
     end
   end
+
+  ### PERSIST HELPERS --------------------------------------------------
+  def persist_worklist(value) do
+    filename = Path.join(data_dir(), Integer.to_string(:os.system_time()) <> "_worklist")
+    work_list = :erlang.term_to_binary(value)
+    md5 = :erlang.md5(work_list)
+
+    data = <<
+      @version::size(8),
+      md5::binary-size(16),
+      work_list::binary
+    >>
+
+    _ =
+      case File.write(filename, data, [:sync]) do
+        :ok ->
+          cleanup_stored_worklists()
+
+        {:error, reason} ->
+          Logger.warn(
+            "Jackalope] Failed to persist worklist #{inspect(data)}: #{inspect(reason)}"
+          )
+      end
+
+    value
+  end
+
+  def retrieve_worklist() do
+    {:ok, files} = data_dir() |> File.ls()
+
+    if files == [] do
+      {:ok, []}
+    else
+      filename =
+        files
+        |> Enum.sort(:desc)
+        |> hd
+
+      case File.read(Path.join(data_dir(), filename)) do
+        {:ok, data} ->
+          checked_bin_to_term(data)
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  def cleanup_stored_worklists() do
+    {:ok, files} = data_dir() |> File.ls()
+
+    case Enum.sort(files, :desc) do
+      [] ->
+        :ok
+
+      [_ | old_files] ->
+        old_files |> Enum.each(fn filename -> File.rm!(Path.join(data_dir(), filename)) end)
+    end
+  end
+
+  def remove_all_worklists() do
+    {:ok, files} = data_dir() |> File.ls()
+    Enum.each(files, fn filename -> File.rm(Path.join(data_dir(), filename)) end)
+  end
+
+  defp data_dir() do
+    dir = Application.get_env(:jackalope, :data_dir)
+    :ok = File.mkdir_p!(dir)
+    dir
+  end
+
+  def checked_bin_to_term(<<@version::size(8), md5::binary-size(16), bin::binary>>) do
+    computed_md5 = :erlang.md5(bin)
+
+    if computed_md5 == md5 do
+      {:ok, :erlang.binary_to_term(bin)}
+    else
+      {:error, :invalid_hash}
+    end
+  end
+
+  def checked_bin_to_term(<<@version::size(8), _other_stuff::binary>>),
+    do: {:error, :truncated_data}
+
+  def checked_bin_to_term(_other), do: {:error, :unsupported_version}
 
   ### PRIVATE HELPERS --------------------------------------------------
   defp execute_work({:publish, topic, payload, opts}) do
