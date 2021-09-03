@@ -15,7 +15,8 @@ defmodule Jackalope.Watchdog do
               alive?: true,
               heartbeat_delay: 120_000,
               max_wait: 30_000,
-              alive_timeout: 5_000
+              alive_timeout: 5_000,
+              app_handler: nil
   end
 
   @doc "FOR TESTING ONLY - Causes a crash"
@@ -62,13 +63,28 @@ defmodule Jackalope.Watchdog do
   end
 
   @impl true
-  def handle_info(:heartbeat, %State{client_id: client_id} = state) do
+  def handle_info(:heartbeat, %State{client_id: client_id, app_handler: app_handler} = state) do
     try do
       answer =
         Task.async(fn -> ping_tortoise(client_id, state.alive_timeout) end)
         |> Task.await(state.max_wait)
 
-      state = %State{state | alive?: answer == :ok}
+      alive? =
+        case answer do
+          :ok ->
+            true
+
+          {:error, :timeout} ->
+            Logger.warn(
+              "[Jackalope] Watchdog - Considering the unresponsive connection as down. Reconnecting."
+            )
+
+            apply(app_handler, :connection, [:down])
+            Jackalope.reconnect()
+            false
+        end
+
+      state = %State{state | alive?: alive?}
       {:noreply, state, {:continue, :schedule_heartbeat}}
     catch
       :exit, reason ->
