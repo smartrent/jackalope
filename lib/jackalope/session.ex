@@ -17,6 +17,8 @@ defmodule Jackalope.Session do
   alias __MODULE__, as: State
   alias Jackalope.TortoiseClient
 
+  @version 1
+
   defstruct connection_status: :offline,
             handler: nil,
             work_list: [],
@@ -112,9 +114,12 @@ defmodule Jackalope.Session do
     # Produce subscription commands for the initial subscriptions
     initial_topics = Keyword.get(opts, :initial_topics)
 
-    work_list =
+    subscriptions =
       for topic_filter <- List.wrap(initial_topics),
           do: {{:subscribe, topic_filter, []}, []}
+
+    {:ok, saved_work_list} = retrive()
+    work_list = Enum.concat(saved_work_list, subscriptions)
 
     initial_state = %State{work_list: work_list, handler: handler}
 
@@ -151,13 +156,15 @@ defmodule Jackalope.Session do
         # in.
         subscriptions: %{},
         work_list:
-          Enum.concat([
-            for(
-              {topic_filter, opts} <- state.subscriptions,
-              do: {{:subscribe, topic_filter, opts}, []}
-            ),
-            state.work_list
-          ])
+          persist(
+            Enum.concat([
+              for(
+                {topic_filter, opts} <- state.subscriptions,
+                do: {{:subscribe, topic_filter, opts}, []}
+              ),
+              state.work_list
+            ])
+          )
     }
 
     {:noreply, state}
@@ -227,7 +234,7 @@ defmodule Jackalope.Session do
     # we retry a message it will reenter the work list at the front,
     # and it could already have messages, etc.
     work_list = [{cmd, opts} | work_list]
-    state = %State{state | work_list: work_list}
+    state = %State{state | work_list: persist(work_list)}
     {:noreply, state, {:continue, :consume_work_list}}
   end
 
@@ -243,13 +250,15 @@ defmodule Jackalope.Session do
         # unsubscribes should be idempotent
         pending: %{},
         work_list:
-          Enum.concat([
-            for(
-              {ref, work_order} when is_reference(ref) <- state.pending,
-              do: work_order
-            ),
-            state.work_list
-          ])
+          persist(
+            Enum.concat([
+              for(
+                {ref, work_order} when is_reference(ref) <- state.pending,
+                do: work_order
+              ),
+              state.work_list
+            ])
+          )
     }
 
     {:noreply, state}
@@ -303,6 +312,76 @@ defmodule Jackalope.Session do
       {:noreply, state, {:continue, :consume_work_list}}
     end
   end
+
+  ### PERSIST HELPERS --------------------------------------------------
+  def persist(value) do
+    filename = "data/" <> Integer.to_string(:os.system_time()) <> "_worklist"
+    work_list = :erlang.term_to_binary(value)
+    md5 = :erlang.md5(work_list)
+
+    data = <<
+      @version::size(8),
+      md5::binary-size(16),
+      work_list::binary
+    >>
+
+    case File.write(filename, data) do
+      :ok -> cleanup_stored_worklists()
+      {:error, reason} -> {:error, reason}
+    end
+
+    value
+  end
+
+  def retrive() do
+    {:ok, files} = File.ls("data")
+
+    if files == [] do
+      {:ok, []}
+    else
+      filename =
+        files
+        |> Enum.sort(:desc)
+        |> hd
+
+      case File.read("data/" <> filename) do
+        {:ok, data} ->
+          checked_bin_to_term(data)
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  def cleanup_stored_worklists() do
+    {:ok, files} = File.ls("data")
+
+    files
+    |> Enum.sort(:desc)
+    |> tl
+    |> Enum.each(fn filename -> File.rm("data/" <> filename) end)
+  end
+
+  def remove_all_worklists() do
+    {:ok, files} = File.ls("data")
+    Enum.each(files, fn filename -> File.rm("data/" <> filename) end)
+  end
+
+  def checked_bin_to_term(<<@version::size(8), md5::binary-size(16), bin::binary>>) do
+    computed_md5 = :erlang.md5(bin)
+
+    if computed_md5 == md5 do
+      {:ok, :erlang.binary_to_term(bin)}
+    else
+      {:error, :invalid_hash}
+    end
+  end
+
+  def checked_bin_to_term(<<@version::size(8), _other_stuff::binary>>),
+    do: {:error, :truncated_data}
+
+  def checked_bin_to_term(_other), do: {:error, :unsupported_version}
 
   ### PRIVATE HELPERS --------------------------------------------------
   defp execute_work({:publish, topic, payload, opts}) do
