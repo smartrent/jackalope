@@ -188,10 +188,10 @@ defmodule JackalopeTest do
     {:ok, pid}
   end
 
-  defp disconnect(context) do
-    script = [:disconnect]
-    {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
-  end
+  # defp disconnect(context) do
+  #   script = [:disconnect]
+  #   {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
+  # end
 
   defp expect_publish(context, %Package.Publish{qos: 0} = publish) do
     # setup the expectation of a publish and assert that the server

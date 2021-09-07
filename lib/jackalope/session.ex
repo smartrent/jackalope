@@ -332,7 +332,7 @@ defmodule Jackalope.Session do
 
         {:error, reason} ->
           Logger.warn(
-            "Jackalope] Failed to persist worklist #{inspect(data)}: #{inspect(reason)}"
+            "[Jackalope] Failed to persist worklist #{inspect(data)}: #{inspect(reason)}"
           )
       end
 
@@ -345,18 +345,24 @@ defmodule Jackalope.Session do
     if files == [] do
       {:ok, []}
     else
-      filename =
+      worklist =
         files
         |> Enum.sort(:desc)
-        |> hd
+        |> Enum.find_value(fn filename ->
+          case File.read(Path.join(data_dir(), filename)) do
+            {:ok, data} ->
+              maybe_data_to_term(data)
 
-      case File.read(Path.join(data_dir(), filename)) do
-        {:ok, data} ->
-          checked_bin_to_term(data)
+            {:error, reason} ->
+              Logger.warn(
+                "[Jackalope] Failed to read worklist file #{filename}: #{inspect(reason)}"
+              )
 
-        {:error, reason} ->
-          {:error, reason}
-      end
+              nil
+          end
+        end)
+
+      {:ok, worklist || []}
     end
   end
 
@@ -396,9 +402,25 @@ defmodule Jackalope.Session do
   def checked_bin_to_term(<<@version::size(8), _other_stuff::binary>>),
     do: {:error, :truncated_data}
 
-  def checked_bin_to_term(_other), do: {:error, :unsupported_version}
+  def checked_bin_to_term(""),
+    do: {:error, :empty}
+
+  def checked_bin_to_term(_other), do: raise("Unsupported_version")
 
   ### PRIVATE HELPERS --------------------------------------------------
+
+  defp maybe_data_to_term(data) do
+    case checked_bin_to_term(data) do
+      {:error, reason} ->
+        Logger.warn("[Jackalope] Failed to extract worklist from data: #{inspect(reason)}")
+
+        nil
+
+      {:ok, term} ->
+        term
+    end
+  end
+
   defp execute_work({:publish, topic, payload, opts}) do
     TortoiseClient.publish(topic, payload, opts)
   end
