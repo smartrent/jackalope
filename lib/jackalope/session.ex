@@ -118,7 +118,7 @@ defmodule Jackalope.Session do
       for topic_filter <- List.wrap(initial_topics),
           do: {{:subscribe, topic_filter, []}, []}
 
-    {:ok, saved_work_list} = retrive()
+    {:ok, saved_work_list} = retrieve_worklist()
     IO.inspect(saved_work_list, label: "saved worklist in INIT")
     work_list = Enum.concat(saved_work_list, subscriptions)
 
@@ -157,7 +157,7 @@ defmodule Jackalope.Session do
         # in.
         subscriptions: %{},
         work_list:
-          persist(
+          persist_worklist(
             Enum.concat([
               for(
                 {topic_filter, opts} <- state.subscriptions,
@@ -235,7 +235,7 @@ defmodule Jackalope.Session do
     # we retry a message it will reenter the work list at the front,
     # and it could already have messages, etc.
     work_list = [{cmd, opts} | work_list]
-    state = %State{state | work_list: persist(work_list)}
+    state = %State{state | work_list: persist_worklist(work_list)}
     {:noreply, state, {:continue, :consume_work_list}}
   end
 
@@ -251,7 +251,7 @@ defmodule Jackalope.Session do
         # unsubscribes should be idempotent
         pending: %{},
         work_list:
-          persist(
+          persist_worklist(
             Enum.concat([
               for(
                 {ref, work_order} when is_reference(ref) <- state.pending,
@@ -318,9 +318,8 @@ defmodule Jackalope.Session do
   end
 
   ### PERSIST HELPERS --------------------------------------------------
-  def persist(value) do
-    File.mkdir_p("data")
-    filename = "data/" <> Integer.to_string(:os.system_time()) <> "_worklist"
+  def persist_worklist(value) do
+    filename = Path.join(data_dir(), Integer.to_string(:os.system_time()) <> "_worklist")
     work_list = :erlang.term_to_binary(value)
     md5 = :erlang.md5(work_list)
 
@@ -338,8 +337,8 @@ defmodule Jackalope.Session do
     value
   end
 
-  def retrive() do
-    {:ok, files} = File.ls("data")
+  def retrieve_worklist() do
+    {:ok, files} = data_dir() |> File.ls()
 
     if files == [] do
       {:ok, []}
@@ -349,7 +348,7 @@ defmodule Jackalope.Session do
         |> Enum.sort(:desc)
         |> hd
 
-      case File.read("data/" <> filename) do
+      case File.read(Path.join(data_dir(), filename)) do
         {:ok, data} ->
           checked_bin_to_term(data)
 
@@ -360,17 +359,26 @@ defmodule Jackalope.Session do
   end
 
   def cleanup_stored_worklists() do
-    {:ok, files} = File.ls("data")
+    {:ok, files} = data_dir() |> File.ls()
 
-    files
-    |> Enum.sort(:desc)
-    |> tl
-    |> Enum.each(fn filename -> File.rm("data/" <> filename) end)
+    case Enum.sort(files, :desc) do
+      [] ->
+        :ok
+
+      [_ | old_files] ->
+        old_files |> Enum.each(fn filename -> File.rm!(Path.join(data_dir(), filename)) end)
+    end
   end
 
   def remove_all_worklists() do
-    {:ok, files} = File.ls("data")
-    Enum.each(files, fn filename -> File.rm("data/" <> filename) end)
+    {:ok, files} = data_dir() |> File.ls()
+    Enum.each(files, fn filename -> File.rm(Path.join(data_dir(), filename)) end)
+  end
+
+  defp data_dir() do
+    dir = Application.get_env(:jackalope, :data_dir)
+    :ok = File.mkdir_p!(dir)
+    dir
   end
 
   def checked_bin_to_term(<<@version::size(8), md5::binary-size(16), bin::binary>>) do

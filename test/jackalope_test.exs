@@ -15,10 +15,10 @@ defmodule JackalopeTest do
 
   describe "persist" do
     test "persist to file" do
-      Session.persist("hello world.")
-      assert {:ok, files} = File.ls("data")
+      Session.persist_worklist("hello world.")
+      assert {:ok, files} = File.ls(Application.get_env(:jackalope, :data_dir))
       assert length(files) == 1
-      assert Session.retrive() == {:ok, "hello world."}
+      assert Session.retrieve_worklist() == {:ok, "hello world."}
     end
 
     test "persist through disconnection", context do
@@ -28,7 +28,7 @@ defmodule JackalopeTest do
       assert :ok = Jackalope.subscribe({"persist/please", qos: 0})
       {:ok, _} = disconnect(context)
 
-      assert Session.retrive() ==
+      assert Session.retrieve_worklist() ==
                {:ok, [{{:subscribe, "persist/please", [qos: 0]}, [ttl: :infinity]}]}
     end
   end
@@ -83,7 +83,7 @@ defmodule JackalopeTest do
       assert %Package.Publish{topic: "foo", qos: 0, payload: payload} = flush.()
       assert expected_payload == Jason.decode!(payload)
 
-      assert Session.retrive() ==
+      assert Session.retrieve_worklist() ==
                {:ok, [{{:publish, "foo", %{"msg" => "hello"}, [qos: 0]}, [ttl: :infinity]}]}
     end
 
@@ -105,7 +105,7 @@ defmodule JackalopeTest do
       assert %Package.Publish{topic: "foo", qos: 1} = received_publish
       assert expected_payload == Jason.decode!(received_publish.payload)
 
-      assert Session.retrive() ==
+      assert Session.retrieve_worklist() ==
                {:ok, [{{:publish, "foo", %{"msg" => "hello"}, [qos: 1]}, [ttl: :infinity]}]}
     end
 
@@ -121,7 +121,7 @@ defmodule JackalopeTest do
       assert :ok = Jackalope.subscribe({"foo/bar", qos: 0})
       {:ok, subscribe} = expect_subscribe(context, [{"foo/bar", 0}])
       :ok = acknowledge_subscribe(context, subscribe, [{:ok, 0}])
-      assert Session.retrive() == {:ok, [{{:subscribe, "foo/bar", [qos: 0]}, [ttl: :infinity]}]}
+      assert Session.retrieve_worklist() == {:ok, [{{:subscribe, "foo/bar", [qos: 0]}, [ttl: :infinity]}]}
     end
 
     test "subscribe to a topic filter with QoS=1", context do
@@ -130,7 +130,7 @@ defmodule JackalopeTest do
       assert :ok = Jackalope.subscribe({"foo/bar", qos: 1})
       {:ok, subscribe} = expect_subscribe(context, [{"foo/bar", 1}])
       :ok = acknowledge_subscribe(context, subscribe, [{:ok, 1}])
-      assert Session.retrive() == {:ok, [{{:subscribe, "foo/bar", [qos: 1]}, [ttl: :infinity]}]}
+      assert Session.retrieve_worklist() == {:ok, [{{:subscribe, "foo/bar", [qos: 1]}, [ttl: :infinity]}]}
     end
   end
 
@@ -141,7 +141,7 @@ defmodule JackalopeTest do
       assert :ok = Jackalope.unsubscribe("foo/bar")
       {:ok, unsubscribe} = expect_unsubscribe(context, ["foo/bar"])
       :ok = acknowledge_unsubscribe(context, unsubscribe)
-      assert Session.retrive() == {:ok, [{{:unsubscribe, "foo/bar", []}, [ttl: :infinity]}]}
+      assert Session.retrieve_worklist() == {:ok, [{{:unsubscribe, "foo/bar", []}, [ttl: :infinity]}]}
     end
   end
 
