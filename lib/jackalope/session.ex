@@ -119,6 +119,7 @@ defmodule Jackalope.Session do
           do: {{:subscribe, topic_filter, []}, []}
 
     {:ok, saved_work_list} = retrive()
+    IO.inspect(saved_work_list, label: "saved worklist in INIT")
     work_list = Enum.concat(saved_work_list, subscriptions)
 
     initial_state = %State{work_list: work_list, handler: handler}
@@ -267,12 +268,14 @@ defmodule Jackalope.Session do
   @impl true
   def handle_continue(:consume_work_list, %State{connection_status: :offline} = state) do
     # postpone consuming from the work list till we are online again!
+    IO.inspect("offline")
     {:noreply, state}
   end
 
   def handle_continue(:consume_work_list, %State{work_list: []} = state) do
     # base-case; we are done consuming and will idle until more work
     # is produced
+    IO.inspect("online, but empty")
     {:noreply, state}
   end
 
@@ -285,6 +288,7 @@ defmodule Jackalope.Session do
           pending: pending
         } = state
       ) do
+    IO.inspect("online")
     state = %State{state | work_list: remaining}
     ttl = Keyword.get(opts, :ttl, :infinity)
 
@@ -315,6 +319,7 @@ defmodule Jackalope.Session do
 
   ### PERSIST HELPERS --------------------------------------------------
   def persist(value) do
+    File.mkdir_p("data")
     filename = "data/" <> Integer.to_string(:os.system_time()) <> "_worklist"
     work_list = :erlang.term_to_binary(value)
     md5 = :erlang.md5(work_list)
