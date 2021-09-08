@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.0
+
+* Updates
+  * Moved to Tortoise 0.10.0
+  * Last-will message callbacks
+
 ## v0.2.0
 
 * Bug fixes
