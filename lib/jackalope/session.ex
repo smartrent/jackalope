@@ -213,7 +213,7 @@ defmodule Jackalope.Session do
 
       {:error, reason} ->
         Logger.warn("Retrying message, failed with reason: #{inspect(reason)}")
-        state = %State{state | work_list: [work_order | state.work_list]}
+        state = %State{state | work_list: persist_worklist([work_order | state.work_list])}
         {:noreply, state}
     end
   end
@@ -293,14 +293,16 @@ defmodule Jackalope.Session do
         :ok ->
           # fire and forget work; Publish with QoS=0 is among the work
           # that doesn't produce references
+          persist_worklist(state.work_list)
           {:noreply, state, {:continue, :consume_work_list}}
 
         {:ok, ref} ->
           state = %State{state | pending: Map.put_new(pending, ref, work_order)}
+          persist_worklist(state.work_list)
           {:noreply, state, {:continue, :consume_work_list}}
 
         {:error, :no_connection} ->
-          {:noreply, %{state | work_list: [work_order | remaining]}}
+          {:noreply, %{state | work_list: persist_worklist([work_order | remaining])}}
       end
     else
       # drop the message, it is outside of the time to live
