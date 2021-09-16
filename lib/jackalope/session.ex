@@ -227,6 +227,7 @@ defmodule Jackalope.Session do
     # we retry a message it will reenter the work list at the front,
     # and it could already have messages, etc.
     work_list = [{cmd, opts} | work_list]
+    persist_work_item({cmd, opts})
     state = %State{state | work_list: work_list}
     {:noreply, state, {:continue, :consume_work_list}}
   end
@@ -246,7 +247,7 @@ defmodule Jackalope.Session do
           Enum.concat([
             for(
               {ref, work_order} when is_reference(ref) <- state.pending,
-              do: work_order
+              do: persist_work_item(work_order)
             ),
             state.work_list
           ])
@@ -284,6 +285,7 @@ defmodule Jackalope.Session do
         :ok ->
           # fire and forget work; Publish with QoS=0 is among the work
           # that doesn't produce references
+          remove_work_item()
           {:noreply, state, {:continue, :consume_work_list}}
 
         {:ok, ref} ->
@@ -304,7 +306,33 @@ defmodule Jackalope.Session do
     end
   end
 
-  ### PRIVATE HELPERS --------------------------------------------------
+  def persist_work_item(work_item) do
+    case CubQ.push(:saved_worklist, work_item) do
+      :ok -> IO.inspect("successfully pushed")
+      error -> IO.inspect(error, label: "failed to push")
+      # error -> Logger.warn("Jackalope] failed to push #{inspect(error)}")
+    end
+
+    IO.inspect(CubQ.pop(:saved_worklist), label: "value popped")
+    work_item
+  end
+
+  def remove_work_item() do
+    {:ok, value} = CubQ.pop(:saved_worklist)
+    IO.inspect(value, label: "popped from worklist")
+  end
+
+  # def retrive_worklist() do
+
+  # end
+
+  # ### PRIVATE HELPERS --------------------------------------------------
+  # defp data_dir() do
+  #   dir = Application.get_env(:jackalope, :data_dir)
+  #   :ok = File.mkdir_p!(dir)
+  #   dir
+  # end
+
   defp execute_work({:publish, topic, payload, opts}) do
     TortoiseClient.publish(topic, payload, opts)
   end

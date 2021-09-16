@@ -11,6 +11,8 @@ defmodule Jackalope do
     host: "localhost", port: 1883
   }
 
+  @data_dir Application.compile_env!(:jackalope, :data_dir)
+
   @doc """
   Start a Jackalope session
 
@@ -85,8 +87,11 @@ defmodule Jackalope do
     client_id = Keyword.get(opts, :client_id, "jackalope")
     initial_topics = Keyword.get(opts, :initial_topics)
     jackalope_handler = Keyword.get(opts, :handler, Jackalope.Handler.Logger)
+    {:ok, db} = CubDB.start_link(data_dir: @data_dir, name: :saved_worklist_db)
+    # {:ok, _pid} = CubQ.start_link(db: db, queue: :saved_worklist)
 
     children = [
+      {CubQ, db: db, queue: :saved_worklist},
       {Jackalope.Session, [initial_topics: initial_topics, handler: jackalope_handler]},
       {Jackalope.Supervisor,
        [

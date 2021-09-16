@@ -2,6 +2,7 @@ defmodule JackalopeTest do
   use ExUnit.Case, async: false
   doctest Jackalope
 
+  alias Jackalope.Session
   alias JackalopeTest.ScriptedMqttServer, as: MqttServer
   alias Tortoise.Package
 
@@ -10,6 +11,20 @@ defmodule JackalopeTest do
     Process.link(mqtt_server_pid)
     client_id = Atom.to_string(context.test)
     {:ok, [client_id: client_id, mqtt_server_pid: mqtt_server_pid]}
+  end
+
+  describe "persistence" do
+    test "persist through disconnection", context do
+      _ = connect(context)
+      IO.inspect(Process.whereis(:saved_worklist_db), label: "whereis process fo CubDB")
+      IO.inspect(Process.whereis(:saved_worklist), label: "whereis process for CubQ")
+
+      assert :ok = Jackalope.subscribe({"persist/please", qos: 0})
+      assert :ok = Jackalope.subscribe({"another/persist", qos: 0})
+      {:ok, _} = disconnect(context)
+
+      assert Session.remove_work_item() == {:ok, [{{:subscribe, "persist/please", [qos: 0]}, [ttl: :infinity]}]}
+    end
   end
 
   describe "start_link/1" do
@@ -250,5 +265,10 @@ defmodule JackalopeTest do
     # expect the scripted server to dispatch the suback
     assert_receive {MqttServer, :completed}
     :ok
+  end
+
+  defp disconnect(context) do
+    script = [:disconnect]
+    {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
   end
 end
