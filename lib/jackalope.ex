@@ -14,6 +14,7 @@ defmodule Jackalope do
   }
 
   @default_max_work_list_size 100
+  @default_work_list_module Jackalope.TransientWorkList
 
   @doc """
   Start a Jackalope session
@@ -74,6 +75,14 @@ defmodule Jackalope do
       customize_hostname_check: [match_fun: :public_key.pkix_verify_hostname_match_fun(:https)]
     ]
 
+  - `work_list_mod` names the module implementing the Jackalope WorkList protocol that will be used to manage
+     the publish commands sent to Tortoise by the Jackalope Session.
+     The module must also implement the function `@spec new(function(), function(), non_neg_integer(), Keyword.t()) :: any()`.
+     See Jackalope.TransientWorkList (the default) and Jackalope.PersistentWorkList for examples.
+
+  - `data_dir` (defaults to the Nerves-friendly "/data/jackalope") is the directory used by PersistentWorkList
+     (if used) to persist the waiting-to-be-sent and pending-confirmation publish commands.
+
   - `max_work_list_size` (default: #{@default_max_work_list_size}) specifies the maximum
     number of unexpired work orders Jackalope will retain in its work list
     (the commands yet to be sent to the MQTT server). When the maximum is
@@ -113,18 +122,23 @@ defmodule Jackalope do
     jackalope_handler = Keyword.get(opts, :handler, Jackalope.Handler.Logger)
     max_work_list_size = Keyword.get(opts, :max_work_list_size, @default_max_work_list_size)
 
+    work_list_mod = Keyword.get(opts, :work_list_mod, @default_work_list_module)
+
     children = [
       {Jackalope.Session,
        [
          handler: jackalope_handler,
-         max_work_list_size: max_work_list_size
+         max_work_list_size: max_work_list_size,
+         work_list_mod: work_list_mod,
+         data_dir: Keyword.get(opts, :data_dir)
        ]},
       {Jackalope.Supervisor,
        [
          handler: jackalope_handler,
          client_id: client_id,
          connection_options: connection_options(opts),
-         last_will: Keyword.get(opts, :last_will)
+         last_will: Keyword.get(opts, :last_will),
+         work_list_mod: work_list_mod
        ]}
     ]
 
