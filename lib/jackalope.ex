@@ -13,6 +13,8 @@ defmodule Jackalope do
     host: "localhost", port: 1883
   }
 
+  @data_dir Application.compile_env!(:jackalope, :data_dir)
+
   @doc """
   Start a Jackalope session
 
@@ -109,15 +111,18 @@ defmodule Jackalope do
     client_id = Keyword.get(opts, :client_id, "jackalope")
     initial_topics = Keyword.get(opts, :initial_topics)
     jackalope_handler = Keyword.get(opts, :handler, Jackalope.Handler.Logger)
-    max_work_list_size = Keyword.get(opts, :max_work_list_size, :infinity)
+    list_max = Keyword.get(opts, :max_work_list_size, :infinity)
 
     children = [
-      {Jackalope.Session,
+      # The queue contains the work list
+      {Jackalope.WorkList,
        [
-         initial_topics: initial_topics,
-         handler: jackalope_handler,
-         max_work_list_size: max_work_list_size
+         queue_name: :saved_worklist,
+         db_name: :saved_worklist_db,
+         max_work_list_size: list_max,
+         data_dir: @data_dir
        ]},
+      {Jackalope.Session, [initial_topics: initial_topics, handler: jackalope_handler]},
       {Jackalope.Supervisor,
        [
          handler: jackalope_handler,

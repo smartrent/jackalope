@@ -40,6 +40,7 @@ defmodule Jackalope.MixProject do
       {:jason, "~> 1.1"},
       {:dialyxir, "~> 1.1.0", only: [:test, :dev], runtime: false},
       {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:cubq, "~> 0.3.0"},
       {:ex_doc, "~> 0.22", only: :docs, runtime: false}
     ]
   end

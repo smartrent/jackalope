@@ -6,15 +6,65 @@ defmodule JackalopeTest do
   alias Tortoise311.Package
 
   setup context do
+    # Give time to the mock mqttServer's supervisor to shut down after each test.
+    Process.sleep(200)
     {:ok, mqtt_server_pid} = start_supervised(MqttServer)
     Process.link(mqtt_server_pid)
     client_id = Atom.to_string(context.test)
     {:ok, [client_id: client_id, mqtt_server_pid: mqtt_server_pid]}
   end
 
+  describe "persistence" do
+    test "work list preserved through disconnection", context do
+      _ = connect(context)
+      Jackalope.WorkList.remove_all()
+
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "first/hi", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "second/hello", [qos: 0]}, []})
+      {:ok, _} = disconnect(context)
+      assert 2 == Jackalope.WorkList.size()
+    end
+  end
+
+  describe "bounded work list" do
+    test "dropping work orders", context do
+      _ = connect(context, max_work_list_size: 3)
+      Jackalope.WorkList.remove_all()
+      assert 0 == Jackalope.WorkList.size()
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "first/hi", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "second/hello", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "third/sup", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "fourth/a", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "fifth/b", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "sixth/c", [qos: 0]}, []})
+      # Give the Session time to put back the "failed" work orders on the work list
+      Process.sleep(500)
+      assert Jackalope.WorkList.size() == 3
+    end
+
+    test "dropping expired work orders", context do
+      _ = connect(context, max_work_list_size: 3)
+      Jackalope.WorkList.remove_all()
+
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "a/b", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "remove/me", []}, [ttl: -1]})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "b/c", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "c/d", [qos: 0]}, []})
+      # Give the Session time to put back the "failed" work orders on the work list
+      Process.sleep(500)
+
+      assert {:ok, {{:do_nothing, "c/d", [qos: 0]}, []}} == Jackalope.WorkList.pop()
+      assert {:ok, {{:do_nothing, "b/c", [qos: 0]}, []}} == Jackalope.WorkList.pop()
+      assert {:ok, {{:do_nothing, "a/b", [qos: 0]}, []}} == Jackalope.WorkList.pop()
+
+      assert nil == Jackalope.WorkList.pop()
+    end
+  end
+
   describe "start_link/1" do
     test "connect to a MQTT server (tcp)", context do
       transport = setup_server(context)
+      Jackalope.WorkList.stop()
 
       assert {:ok, pid} =
                Jackalope.start_link(
@@ -23,12 +73,12 @@ defmodule JackalopeTest do
                  handler: JackalopeTest.TestHandler
                )
 
-      assert_receive {MqttServer, {:received, %Package.Connect{}}}
+      assert_receive {MqttServer, {:received, %Package.Connect{}}}, 1_000
 
       assert is_pid(pid)
       assert Process.alive?(pid)
 
-      assert_receive {MqttServer, :completed}, 200
+      assert_receive {MqttServer, :completed}, 1_000
 
       assert %{subscriptions: %{}} = Jackalope.Session.status()
     end
@@ -104,19 +154,6 @@ defmodule JackalopeTest do
     end
   end
 
-  describe "bounded work list" do
-    test "dropping work orders", context do
-      _ = connect(context, max_work_list_size: 10)
-
-      for i <- 1..15 do
-        assert :ok = Jackalope.publish("foo", %{"msg" => "hello #{i}"}, qos: 1)
-      end
-
-      work_list = Jackalope.Session.status() |> Map.fetch!(:work_list)
-      assert Enum.count(work_list) == 10
-    end
-  end
-
   # Apologies for the mess after this point; these are helpers that
   # makes it easier to assert that a subscription has been placed, and
   # acknowledge that subscription; assert that a publish has been
@@ -140,8 +177,7 @@ defmodule JackalopeTest do
     handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
     initial_topics = Keyword.get(opts, :initial_topics)
     max_work_list_size = Keyword.get(opts, :max_work_list_size, :infinity)
-    # Timing issue hack: Make sure the Session is fully terminated before we reconnect
-    # and have the Jackelope supervisor initiated another of the same name
+    Jackalope.WorkList.stop()
     kill_session()
 
     result =
@@ -161,8 +197,8 @@ defmodule JackalopeTest do
 
     assert is_pid(pid)
 
-    assert_receive {MqttServer, {:received, %Package.Connect{client_id: ^client_id}}}
-    assert_receive {MqttServer, :completed}
+    assert_receive {MqttServer, {:received, %Package.Connect{client_id: ^client_id}}}, 1_000
+    assert_receive {MqttServer, :completed}, 1_000
     {:ok, pid}
   end
 
@@ -181,8 +217,8 @@ defmodule JackalopeTest do
     {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
 
     fn ->
-      assert_receive {MqttServer, {:received, received_publish = %Package.Publish{}}}
-      assert_receive {MqttServer, :completed}
+      assert_receive {MqttServer, {:received, received_publish = %Package.Publish{}}}, 1_000
+      assert_receive {MqttServer, :completed}, 1_000
       received_publish
     end
   end
@@ -196,13 +232,13 @@ defmodule JackalopeTest do
     {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
 
     fn ->
-      assert_receive {MqttServer, {:received, received_publish = %Package.Publish{}}}
-      assert_receive {MqttServer, :completed}
+      assert_receive {MqttServer, {:received, received_publish = %Package.Publish{}}}, 1_000
+      assert_receive {MqttServer, :completed}, 1_000
 
       # acknowledge that message
       script = [{:send, %Package.Puback{identifier: received_publish.identifier}}]
       {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
-      assert_receive {MqttServer, :completed}
+      assert_receive {MqttServer, :completed}, 1_000
 
       received_publish
     end
@@ -231,8 +267,8 @@ defmodule JackalopeTest do
     # package from the client
     script = [{:receive, subscribe}]
     {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
-    assert_receive {MqttServer, {:received, package = %Package.Subscribe{}}}
-    assert_receive {MqttServer, :completed}
+    assert_receive {MqttServer, {:received, package = %Package.Subscribe{}}}, 1_000
+    assert_receive {MqttServer, :completed}, 1_000
 
     {:ok, package}
   end
@@ -249,7 +285,7 @@ defmodule JackalopeTest do
     script = [{:send, suback}]
     {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
     # expect the scripted server to dispatch the suback
-    assert_receive {MqttServer, :completed}
+    assert_receive {MqttServer, :completed}, 1_000
     :ok
   end
 
@@ -258,8 +294,8 @@ defmodule JackalopeTest do
     # package from the client
     script = [{:receive, unsubscribe}]
     {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
-    assert_receive {MqttServer, {:received, package = %Package.Unsubscribe{}}}
-    assert_receive {MqttServer, :completed}
+    assert_receive {MqttServer, {:received, package = %Package.Unsubscribe{}}}, 1_000
+    assert_receive {MqttServer, :completed}, 1_000
 
     {:ok, package}
   end
@@ -276,7 +312,12 @@ defmodule JackalopeTest do
     script = [{:send, unsuback}]
     {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
     # expect the scripted server to dispatch the suback
-    assert_receive {MqttServer, :completed}
+    assert_receive {MqttServer, :completed}, 1_000
     :ok
+  end
+
+  defp disconnect(context) do
+    script = [:disconnect]
+    {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
   end
 end
