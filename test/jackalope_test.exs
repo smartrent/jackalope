@@ -23,7 +23,8 @@ defmodule JackalopeTest do
       assert :ok = Jackalope.subscribe({"another/persist", qos: 0})
       {:ok, _} = disconnect(context)
 
-      assert Session.remove_work_item() == {:ok, [{{:subscribe, "persist/please", [qos: 0]}, [ttl: :infinity]}]}
+      assert Session.remove_work_item() ==
+               {:ok, [{{:subscribe, "persist/please", [qos: 0]}, [ttl: :infinity]}]}
     end
   end
 

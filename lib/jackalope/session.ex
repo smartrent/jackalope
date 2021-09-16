@@ -308,9 +308,12 @@ defmodule Jackalope.Session do
 
   def persist_work_item(work_item) do
     case CubQ.push(:saved_worklist, work_item) do
-      :ok -> IO.inspect("successfully pushed")
-      error -> IO.inspect(error, label: "failed to push")
-      # error -> Logger.warn("Jackalope] failed to push #{inspect(error)}")
+      :ok ->
+        IO.inspect("successfully pushed")
+
+      error ->
+        IO.inspect(error, label: "failed to push")
+        # error -> Logger.warn("Jackalope] failed to push #{inspect(error)}")
     end
 
     IO.inspect(CubQ.pop(:saved_worklist), label: "value popped")
