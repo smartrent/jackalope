@@ -87,11 +87,11 @@ defmodule Jackalope do
     client_id = Keyword.get(opts, :client_id, "jackalope")
     initial_topics = Keyword.get(opts, :initial_topics)
     jackalope_handler = Keyword.get(opts, :handler, Jackalope.Handler.Logger)
-    {:ok, db} = CubDB.start_link(data_dir: @data_dir, name: :saved_worklist_db)
-    # {:ok, _pid} = CubQ.start_link(db: db, queue: :saved_worklist)
 
     children = [
-      {CubQ, db: db, queue: :saved_worklist},
+      # The queue contains the work list
+      {Jackalope.Queue,
+       [queue_name: :saved_worklist, db_name: :saved_worklist_db, data_dir: @data_dir]},
       {Jackalope.Session, [initial_topics: initial_topics, handler: jackalope_handler]},
       {Jackalope.Supervisor,
        [

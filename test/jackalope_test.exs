@@ -14,23 +14,27 @@ defmodule JackalopeTest do
   end
 
   describe "persistence" do
-    test "persist through disconnection", context do
+    test "work list repopulated by disconnection", context do
       _ = connect(context)
-      IO.inspect(Process.whereis(:saved_worklist_db), label: "whereis process fo CubDB")
-      IO.inspect(Process.whereis(:saved_worklist), label: "whereis process for CubQ")
 
       assert :ok = Jackalope.subscribe({"persist/please", qos: 0})
       assert :ok = Jackalope.subscribe({"another/persist", qos: 0})
       {:ok, _} = disconnect(context)
 
-      assert Session.remove_work_item() ==
-               {:ok, [{{:subscribe, "persist/please", [qos: 0]}, [ttl: :infinity]}]}
+      assert {:ok, {{:subscribe, "persist/please", [qos: 0]}, [ttl: :infinity]}} =
+               Jackalope.Queue.pop()
+
+      assert {:ok, {{:subscribe, "another/persist", [qos: 0]}, [ttl: :infinity]}} =
+               Jackalope.Queue.pop()
+
+      assert nil == Jackalope.Queue.pop()
     end
   end
 
   describe "start_link/1" do
     test "connect to a MQTT server (tcp)", context do
       transport = setup_server(context)
+      Jackalope.Queue.stop()
 
       assert {:ok, pid} =
                Jackalope.start_link(
@@ -146,6 +150,7 @@ defmodule JackalopeTest do
 
     handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
     initial_topics = Keyword.get(opts, :initial_topics)
+    Jackalope.Queue.stop()
 
     assert {:ok, pid} =
              Jackalope.start_link(
