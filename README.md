@@ -52,6 +52,20 @@ service and time to live.
 
 <!-- MDOC !-->
 
+## Configuration
+
+Jackalope puts the publish commands on a work list before it sends them to Tortoise311.
+The work list moves the commands from waiting to be sent, to pending (sent and waiting for a response),
+to discarded when confirmed by Tortoise311 as processed or when they are expired.
+
+The work list has a maximum size which defaults to 100. Only a maximum number of publish commands
+can wait, should Tortoise311 be temporarily disconnected, to be forwarded to Tortoise311.
+
+You can set the Jackalope.start_link/1 `:work_list_mod` option to the desired work list implementation.
+See the documentation for module `Jackalope`.
+
+<!-- MDOC !-->
+
 ## Installation
 
 If [available in Hex](https://hex.pm/docs/publish), the package can be

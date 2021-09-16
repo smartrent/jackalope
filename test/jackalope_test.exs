@@ -2,8 +2,12 @@ defmodule JackalopeTest do
   use ExUnit.Case, async: false
   doctest Jackalope
 
+  alias Jackalope.WorkList
+  alias Jackalope.WorkList.Expiration
   alias JackalopeTest.ScriptedMqttServer, as: MqttServer
   alias Tortoise311.Package
+
+  @work_list_mod Jackalope.TransientWorkList
 
   setup context do
     {:ok, mqtt_server_pid} = start_supervised(MqttServer)
@@ -20,7 +24,8 @@ defmodule JackalopeTest do
                Jackalope.start_link(
                  server: transport,
                  client_id: context.client_id,
-                 handler: JackalopeTest.TestHandler
+                 handler: JackalopeTest.TestHandler,
+                 work_list_mod: @work_list_mod
                )
 
       assert_receive {MqttServer, {:received, %Package.Connect{}}}
@@ -29,14 +34,6 @@ defmodule JackalopeTest do
       assert Process.alive?(pid)
 
       assert_receive {MqttServer, :completed}, 200
-    end
-
-    test "connect to a MQTT server with initial subscribe topics (tcp)", context do
-      # When we connect with a initial topics list set we will expect
-      # a subscribe package on the server side after we connect;
-      connect(context, initial_topics: ["foo/bar"])
-      {:ok, subscribe} = expect_subscribe(context, [{"foo/bar", 1}])
-      :ok = acknowledge_subscribe(context, subscribe, [{:ok, 1}])
     end
   end
 
@@ -84,46 +81,103 @@ defmodule JackalopeTest do
   describe "work list" do
     test "dropping work orders", context do
       connect(context, max_work_list_size: 10)
-
-      for i <- 1..15 do
-        assert :ok = Jackalope.publish("foo", %{"msg" => "hello #{i}"}, qos: 1)
-      end
+      pause_mqtt_server(context)
 
       work_list = get_session_work_list()
-      assert Jackalope.WorkList.count(work_list) == 10
+
+      work_list =
+        Enum.reduce(1..15, work_list, fn i, acc ->
+          WorkList.push(
+            acc,
+            {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
+             [expiration: Expiration.expiration(:infinity)]}
+          )
+        end)
+
+      assert WorkList.count(work_list) == 10
     end
 
     test "pending and done work items", context do
       connect(context, max_work_list_size: 10)
+      pause_mqtt_server(context)
 
-      for i <- 1..5 do
-        assert :ok = Jackalope.publish("foo", %{"msg" => "hello #{i}"}, qos: 1)
-      end
+      work_list = get_session_work_list()
+
+      work_list =
+        Enum.reduce(1..5, work_list, fn i, acc ->
+          WorkList.push(
+            acc,
+            {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
+             [expiration: Expiration.expiration(:infinity)]}
+          )
+        end)
+
+      assert WorkList.count(work_list) == 5
 
       ref = make_ref()
 
       {work_list, _item} =
-        get_session_work_list()
-        |> Jackalope.WorkList.pending(ref)
-        |> Jackalope.WorkList.done(ref)
+        work_list
+        |> WorkList.pending(ref)
+        |> WorkList.done(ref)
 
-      assert Jackalope.WorkList.count(work_list) == 4
+      assert WorkList.count(work_list) == 4
+    end
+
+    test "dropping pending work items", context do
+      connect(context, max_work_list_size: 10)
+      pause_mqtt_server(context)
+
+      work_list = get_session_work_list()
+
+      work_list =
+        Enum.reduce(1..15, work_list, fn i, acc ->
+          WorkList.push(
+            acc,
+            {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
+             [expiration: Expiration.expiration(:infinity)]}
+          )
+          |> WorkList.pending(make_ref())
+        end)
+
+      assert WorkList.count_pending(work_list) == 10
     end
 
     test "reset_pending work items", context do
       connect(context, max_work_list_size: 10)
-
-      for i <- 1..5 do
-        assert :ok = Jackalope.publish("foo", %{"msg" => "hello #{i}"}, qos: 1)
-      end
+      pause_mqtt_server(context)
 
       work_list = get_session_work_list()
+
+      work_list =
+        Enum.reduce(1..5, work_list, fn i, acc ->
+          WorkList.push(
+            acc,
+            {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
+             [expiration: Expiration.expiration(:infinity)]}
+          )
+        end)
+
       ref = make_ref()
 
-      work_list = Jackalope.WorkList.pending(work_list, ref)
-      assert Jackalope.WorkList.count(work_list) == 4
-      work_list = Jackalope.WorkList.reset_pending(work_list)
-      assert Jackalope.WorkList.count(work_list) == 5
+      work_list = WorkList.pending(work_list, ref)
+      assert WorkList.count(work_list) == 4
+      work_list = WorkList.reset_pending(work_list)
+      assert WorkList.count(work_list) == 5
+    end
+
+    test "rebasing expiration" do
+      time = Expiration.now()
+      exp1 = Expiration.expiration(100)
+      exp2 = Expiration.expiration(200)
+      stop_time = time + 10
+      assert Expiration.after?(exp2, exp1)
+      restart_time = Enum.random(-10_000..10_000)
+      ttl1 = Expiration.rebase_expiration(exp1, stop_time, restart_time)
+      ttl2 = Expiration.rebase_expiration(exp2, stop_time, restart_time)
+      assert Expiration.after?(exp2, exp1)
+      assert ttl1 == restart_time + 90
+      assert ttl2 <= restart_time + 190
     end
   end
 
@@ -158,12 +212,17 @@ defmodule JackalopeTest do
          client_id: client_id,
          handler: handler,
          initial_topics: initial_topics,
-         max_work_list_size: max_work_list_size
+         max_work_list_size: max_work_list_size,
+         work_list_mod: @work_list_mod
        ]}
     )
 
     assert_receive {MqttServer, {:received, %Package.Connect{client_id: ^client_id}}}
     assert_receive {MqttServer, :completed}
+
+    work_list = get_session_work_list()
+    WorkList.remove_all(work_list)
+    assert WorkList.empty?(work_list)
   end
 
   defp expect_publish(context, %Package.Publish{qos: 0} = publish) do
@@ -175,8 +234,8 @@ defmodule JackalopeTest do
     {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
 
     fn ->
-      assert_receive {MqttServer, {:received, received_publish = %Package.Publish{}}}
-      assert_receive {MqttServer, :completed}
+      assert_receive {MqttServer, {:received, received_publish = %Package.Publish{}}}, 500
+      assert_receive {MqttServer, :completed}, 500
       received_publish
     end
   end
@@ -190,13 +249,13 @@ defmodule JackalopeTest do
     {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
 
     fn ->
-      assert_receive {MqttServer, {:received, received_publish = %Package.Publish{}}}
-      assert_receive {MqttServer, :completed}
+      assert_receive {MqttServer, {:received, received_publish = %Package.Publish{}}}, 500
+      assert_receive {MqttServer, :completed}, 500
 
       # acknowledge that message
       script = [{:send, %Package.Puback{identifier: received_publish.identifier}}]
       {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
-      assert_receive {MqttServer, :completed}
+      assert_receive {MqttServer, :completed}, 500
 
       received_publish
     end
@@ -220,30 +279,8 @@ defmodule JackalopeTest do
     %Package.Publish{publish | payload: Jason.encode!(data)}
   end
 
-  defp expect_subscribe(context, %Package.Subscribe{} = subscribe) do
-    # setup the expectation that the server will receive a subscribe
-    # package from the client
-    script = [{:receive, subscribe}]
-    {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
-    assert_receive {MqttServer, {:received, package = %Package.Subscribe{}}}
-    assert_receive {MqttServer, :completed}
-
-    {:ok, package}
-  end
-
-  defp expect_subscribe(context, [{topic, qos} | _] = subscribe_topics)
-       when is_integer(qos) and is_binary(topic) do
-    subscribe = %Package.Subscribe{topics: subscribe_topics}
-    expect_subscribe(context, subscribe)
-  end
-
-  defp acknowledge_subscribe(context, %Package.Subscribe{identifier: id, topics: topics}, acks)
-       when not is_nil(id) and length(topics) == length(acks) do
-    suback = %Package.Suback{identifier: id, acks: acks}
-    script = [{:send, suback}]
-    {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
-    # expect the scripted server to dispatch the suback
-    assert_receive {MqttServer, :completed}
-    :ok
+  defp pause_mqtt_server(context) do
+    {:ok, _} = MqttServer.enact(context.mqtt_server_pid, [:pause])
+    Process.sleep(100)
   end
 end
