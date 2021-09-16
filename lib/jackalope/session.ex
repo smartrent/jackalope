@@ -8,18 +8,17 @@ defmodule Jackalope.Session do
   # the application is not supervised in the same supervision branch as
   # Tortoise, so we shouldn't drop important messages if Tortoise, or
   # any of its siblings should crash; and we should retry messages that
-  # was not delivered for whatever reason.
+  # were not delivered for whatever reason.
 
   use GenServer
 
   require Logger
 
   alias __MODULE__, as: State
-  alias Jackalope.TortoiseClient
+  alias Jackalope.{WorkList, TortoiseClient}
 
   defstruct connection_status: :offline,
             handler: nil,
-            work_list: [],
             pending: %{},
             subscriptions: %{}
 
@@ -112,11 +111,10 @@ defmodule Jackalope.Session do
     # Produce subscription commands for the initial subscriptions
     initial_topics = Keyword.get(opts, :initial_topics)
 
-    work_list =
-      for topic_filter <- List.wrap(initial_topics),
-          do: {{:subscribe, topic_filter, []}, []}
+    for topic_filter <- List.wrap(initial_topics),
+        do: push_work_order({{:subscribe, topic_filter, []}, []})
 
-    initial_state = %State{work_list: work_list, handler: handler}
+    initial_state = %State{handler: handler}
 
     {:ok, initial_state, {:continue, :consume_work_list}}
   end
@@ -149,16 +147,13 @@ defmodule Jackalope.Session do
         # unsubscribe placed should come after this, making sure we
         # will not resubscribe to a topic we are no longer interested
         # in.
-        subscriptions: %{},
-        work_list:
-          Enum.concat([
-            for(
-              {topic_filter, opts} <- state.subscriptions,
-              do: {{:subscribe, topic_filter, opts}, []}
-            ),
-            state.work_list
-          ])
+        subscriptions: %{}
     }
+
+    for(
+      {topic_filter, opts} <- state.subscriptions,
+      do: push_work_order({{:subscribe, topic_filter, opts}, []})
+    )
 
     {:noreply, state}
   end
@@ -206,13 +201,13 @@ defmodule Jackalope.Session do
 
       {:error, reason} ->
         Logger.warn("Retrying message, failed with reason: #{inspect(reason)}")
-        state = %State{state | work_list: [work_order | state.work_list]}
+        push_work_order(work_order)
         {:noreply, state}
     end
   end
 
   @impl true
-  def handle_cast({:cmd, cmd, opts}, %State{work_list: work_list} = state) do
+  def handle_cast({:cmd, cmd, opts}, state) do
     # Setup the options for the work order; so far we support time to
     # live, which allow us to specify the time a work order is allowed
     # to stay in the work list before it is deemed irrelevant
@@ -226,33 +221,20 @@ defmodule Jackalope.Session do
     # the commands; the work_list is a list (and thus a stack) and when
     # we retry a message it will reenter the work list at the front,
     # and it could already have messages, etc.
-    work_list = [{cmd, opts} | work_list]
-    state = %State{state | work_list: work_list}
+    push_work_order({cmd, opts})
     {:noreply, state, {:continue, :consume_work_list}}
   end
 
   def handle_cast(:reconnect, state) do
     :ok = Jackalope.TortoiseClient.reconnect()
+    # We will republish all the messages we got in pending; this
+    # might result in messages being received twice, but this is
+    # already an issue with QoS=1 messages; subscribes and
+    # unsubscribes should be idempotent
 
-    state = %State{
-      state
-      | connection_status: :offline,
-        # We will republish all the messages we got in pending; this
-        # might result in messages being received twice, but this is
-        # already an issue with QoS=1 messages; subscribes and
-        # unsubscribes should be idempotent
-        pending: %{},
-        work_list:
-          Enum.concat([
-            for(
-              {ref, work_order} when is_reference(ref) <- state.pending,
-              do: work_order
-            ),
-            state.work_list
-          ])
-    }
+    for {ref, work_order} when is_reference(ref) <- state.pending, do: push_work_order(work_order)
 
-    {:noreply, state}
+    {:noreply, %State{state | connection_status: :offline, pending: %{}}}
   end
 
   @impl true
@@ -261,50 +243,62 @@ defmodule Jackalope.Session do
     {:noreply, state}
   end
 
-  def handle_continue(:consume_work_list, %State{work_list: []} = state) do
-    # base-case; we are done consuming and will idle until more work
-    # is produced
-    {:noreply, state}
-  end
-
   # reductive case, consume work until the work list is empty
   def handle_continue(
         :consume_work_list,
         %State{
           connection_status: :online,
-          work_list: [{cmd, opts} = work_order | remaining],
           pending: pending
         } = state
       ) do
-    state = %State{state | work_list: remaining}
-    ttl = Keyword.get(opts, :ttl, :infinity)
+    case pop_work_order() do
+      nil ->
+        {:noreply, state}
 
-    if ttl > System.monotonic_time(:millisecond) do
-      case execute_work(cmd) do
-        :ok ->
-          # fire and forget work; Publish with QoS=0 is among the work
-          # that doesn't produce references
+      {cmd, opts} = work_order ->
+        ttl = Keyword.get(opts, :ttl, :infinity)
+
+        if ttl > System.monotonic_time(:millisecond) do
+          case execute_work(cmd) do
+            :ok ->
+              # fire and forget work; Publish with QoS=0 is among the work
+              # that doesn't produce references
+              {:noreply, state, {:continue, :consume_work_list}}
+
+            {:ok, ref} ->
+              {:noreply, %State{state | pending: Map.put_new(pending, ref, work_order)},
+               {:continue, :consume_work_list}}
+
+            {:error, :no_connection} ->
+              # Put work order back on work list
+              push_work_order(work_order)
+              {:noreply, state}
+          end
+        else
+          # drop the message, it is outside of the time to live
+          if function_exported?(state.handler, :handle_error, 1) do
+            reason = {:publish_error, cmd, :ttl_expired}
+            apply(state.handler, :handle_error, [reason])
+          end
+
           {:noreply, state, {:continue, :consume_work_list}}
-
-        {:ok, ref} ->
-          state = %State{state | pending: Map.put_new(pending, ref, work_order)}
-          {:noreply, state, {:continue, :consume_work_list}}
-
-        {:error, :no_connection} ->
-          {:noreply, %{state | work_list: [work_order | remaining]}}
-      end
-    else
-      # drop the message, it is outside of the time to live
-      if function_exported?(state.handler, :handle_error, 1) do
-        reason = {:publish_error, cmd, :ttl_expired}
-        apply(state.handler, :handle_error, [reason])
-      end
-
-      {:noreply, state, {:continue, :consume_work_list}}
+        end
     end
   end
 
-  ### PRIVATE HELPERS --------------------------------------------------
+  defp pop_work_order() do
+    case WorkList.pop() do
+      {:ok, work_order} -> work_order
+      nil -> nil
+    end
+  end
+
+  defp push_work_order(work_order) do
+    :ok = WorkList.push(work_order)
+  end
+
+  # ### PRIVATE HELPERS --------------------------------------------------
+
   defp execute_work({:publish, topic, payload, opts}) do
     TortoiseClient.publish(topic, payload, opts)
   end

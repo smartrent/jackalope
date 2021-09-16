@@ -11,6 +11,8 @@ defmodule Jackalope do
     host: "localhost", port: 1883
   }
 
+  @data_dir Application.compile_env!(:jackalope, :data_dir)
+
   @doc """
   Start a Jackalope session
 
@@ -87,6 +89,9 @@ defmodule Jackalope do
     jackalope_handler = Keyword.get(opts, :handler, Jackalope.Handler.Logger)
 
     children = [
+      # The queue contains the work list
+      {Jackalope.WorkList,
+       [queue_name: :saved_worklist, db_name: :saved_worklist_db, data_dir: @data_dir]},
       {Jackalope.Session, [initial_topics: initial_topics, handler: jackalope_handler]},
       {Jackalope.Supervisor,
        [

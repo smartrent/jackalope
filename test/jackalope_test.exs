@@ -2,6 +2,7 @@ defmodule JackalopeTest do
   use ExUnit.Case, async: false
   doctest Jackalope
 
+  alias Jackalope.Session
   alias JackalopeTest.ScriptedMqttServer, as: MqttServer
   alias Tortoise.Package
 
@@ -12,9 +13,28 @@ defmodule JackalopeTest do
     {:ok, [client_id: client_id, mqtt_server_pid: mqtt_server_pid]}
   end
 
+  describe "persistence" do
+    test "work list repopulated by disconnection", context do
+      _ = connect(context)
+
+      assert :ok = Jackalope.subscribe({"persist/please", qos: 0})
+      assert :ok = Jackalope.subscribe({"another/persist", qos: 0})
+      {:ok, _} = disconnect(context)
+
+      assert {:ok, {{:subscribe, "persist/please", [qos: 0]}, [ttl: :infinity]}} =
+               Jackalope.WorkList.pop()
+
+      assert {:ok, {{:subscribe, "another/persist", [qos: 0]}, [ttl: :infinity]}} =
+               Jackalope.WorkList.pop()
+
+      assert nil == Jackalope.WorkList.pop()
+    end
+  end
+
   describe "start_link/1" do
     test "connect to a MQTT server (tcp)", context do
       transport = setup_server(context)
+      Jackalope.WorkList.stop()
 
       assert {:ok, pid} =
                Jackalope.start_link(
@@ -130,6 +150,7 @@ defmodule JackalopeTest do
 
     handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
     initial_topics = Keyword.get(opts, :initial_topics)
+    Jackalope.WorkList.stop()
 
     assert {:ok, pid} =
              Jackalope.start_link(
@@ -250,5 +271,10 @@ defmodule JackalopeTest do
     # expect the scripted server to dispatch the suback
     assert_receive {MqttServer, :completed}
     :ok
+  end
+
+  defp disconnect(context) do
+    script = [:disconnect]
+    {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
   end
 end
