@@ -93,6 +93,10 @@ defmodule JackalopeTest.ScriptedMqttServer do
     {:stop, :normal, state}
   end
 
+  def handle_info(_info, state) do
+    {:noreply, state}
+  end
+
   defp next_action(%State{script: [{:send, package} | remaining]} = state) do
     # send the package right away
     encoded_package = Package.encode(package)

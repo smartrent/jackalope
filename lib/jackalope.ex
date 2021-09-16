@@ -14,6 +14,7 @@ defmodule Jackalope do
   }
 
   @default_max_work_list_size 100
+  @default_work_list_module Jackalope.TransientWorkList
 
   @doc """
   Start a Jackalope session
@@ -74,6 +75,13 @@ defmodule Jackalope do
       customize_hostname_check: [match_fun: :public_key.pkix_verify_hostname_match_fun(:https)]
     ]
 
+  - `work_list_mod` names the module implementing the Jackalope WorkList behaviour that will be used to manage
+     the publish commands sent to Tortoise by the Jackalope Session.
+     Jackalope.TransientWorkList (the default) and Jackalope.PersistentWorkList are available.
+
+  - `data_dir` (defaults to the Nerves-friendly "/data/jackalope") is the directory used by PersistentWorkList
+     (if used) to persist the waiting-to-be-sent and pending-confirmation publish commands.
+
   - `max_work_list_size` (default: #{@default_max_work_list_size}) specifies the maximum
     number of unexpired work orders Jackalope will retain in its work list
     (the commands yet to be sent to the MQTT server). When the maximum is
@@ -113,20 +121,26 @@ defmodule Jackalope do
     jackalope_handler = Keyword.get(opts, :handler, Jackalope.Handler.Logger)
     max_work_list_size = Keyword.get(opts, :max_work_list_size, @default_max_work_list_size)
 
-    children = [
-      {Jackalope.Session,
-       [
-         handler: jackalope_handler,
-         max_work_list_size: max_work_list_size
-       ]},
-      {Jackalope.Supervisor,
-       [
-         handler: jackalope_handler,
-         client_id: client_id,
-         connection_options: connection_options(opts),
-         last_will: Keyword.get(opts, :last_will)
-       ]}
-    ]
+    work_list_mod = Keyword.get(opts, :work_list_mod, @default_work_list_module)
+
+    children =
+      [
+        {Jackalope.Session,
+         [
+           handler: jackalope_handler,
+           max_work_list_size: max_work_list_size,
+           work_list_mod: work_list_mod
+         ]},
+        {Jackalope.Supervisor,
+         [
+           handler: jackalope_handler,
+           client_id: client_id,
+           connection_options: connection_options(opts),
+           last_will: Keyword.get(opts, :last_will),
+           work_list_mod: @default_work_list_module
+         ]}
+      ]
+      |> maybe_add_persistent_work_list(work_list_mod, opts)
 
     # Supervision strategy is rest for one, as a crash in Jackalope
     # would result in inconsistent state in Jackalope; we would not be
@@ -215,5 +229,15 @@ defmodule Jackalope do
     # TODO improve the user experience when working with AWS IoT and
     #   then remove this raise
     raise ArgumentError, "Please specify a Tortoise311 transport for the server"
+  end
+
+  defp maybe_add_persistent_work_list(children, work_list_mod, opts) do
+    case work_list_mod do
+      Jackalope.TransientWorkList ->
+        children
+
+      Jackalope.PersistentWorkList ->
+        [{Jackalope.PersistentWorkList, opts} | children]
+    end
   end
 end

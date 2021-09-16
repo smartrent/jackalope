@@ -72,11 +72,17 @@ defmodule Jackalope.Session do
   def init(opts) do
     handler = Keyword.fetch!(opts, :handler)
     max_work_list_size = Keyword.fetch!(opts, :max_work_list_size)
+    work_list_mod = Keyword.fetch!(opts, :work_list_mod)
 
-    work_list = WorkList.new([], max_work_list_size)
+    work_list_inst =
+      work_list_mod.new(
+        fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
+        fn {cmd, opts}, expiration -> {cmd, Keyword.put(opts, :expiration, expiration)} end,
+        max_work_list_size
+      )
 
     initial_state = %State{
-      work_list: work_list,
+      work_list: {work_list_mod, work_list_inst},
       handler: handler
     }
 
@@ -126,7 +132,7 @@ defmodule Jackalope.Session do
 
         state = %State{
           state
-          | work_list: WorkList.push(state.work_list, work_item)
+          | work_list: WorkList.push(work_list, work_item)
         }
 
         {:noreply, state}
@@ -180,41 +186,42 @@ defmodule Jackalope.Session do
           work_list: work_list
         } = state
       ) do
-    if WorkList.empty?(work_list) do
-      {:noreply, state}
-    else
-      {cmd, opts} = WorkList.peek(work_list)
-      expiration = Keyword.fetch!(opts, :expiration)
+    case WorkList.peek(work_list) do
+      nil ->
+        {:noreply, state}
 
-      if expiration > WorkList.expiration(0) do
-        case execute_work(cmd) do
-          :ok ->
-            # fire and forget work; Publish with QoS=0 is among the work
-            # that doesn't produce references
-            {:noreply, %State{state | work_list: WorkList.pop(work_list)},
-             {:continue, :consume_work_list}}
+      {cmd, opts} ->
+        expiration = Keyword.fetch!(opts, :expiration)
 
-          {:ok, ref} ->
-            state = %State{
-              state
-              | work_list: WorkList.pending(work_list, ref)
-            }
+        if not expired?(expiration) do
+          case execute_work(cmd) do
+            :ok ->
+              # fire and forget work; Publish with QoS=0 is among the work
+              # that doesn't produce references
+              {:noreply, %State{state | work_list: WorkList.pop(work_list)},
+               {:continue, :consume_work_list}}
 
-            {:noreply, state, {:continue, :consume_work_list}}
+            {:ok, ref} ->
+              state = %State{
+                state
+                | work_list: WorkList.pending(work_list, ref)
+              }
 
-          {:error, reason} ->
-            Logger.warn("[Jackalope] Temporarily failed to execute #{inspect(cmd)}: #{reason}")
-            {:noreply, state}
+              {:noreply, state, {:continue, :consume_work_list}}
+
+            {:error, reason} ->
+              Logger.warn("[Jackalope] Temporarily failed to execute #{inspect(cmd)}: #{reason}")
+              {:noreply, state}
+          end
+        else
+          # drop the message, it is outside of the time to live
+          if function_exported?(state.handler, :handle_error, 1) do
+            reason = {:publish_error, cmd, :ttl_expired}
+            apply(state.handler, :handle_error, [reason])
+          end
+
+          {:noreply, state, {:continue, :consume_work_list}}
         end
-      else
-        # drop the message, it is outside of the time to live
-        if function_exported?(state.handler, :handle_error, 1) do
-          reason = {:publish_error, cmd, :ttl_expired}
-          apply(state.handler, :handle_error, [reason])
-        end
-
-        {:noreply, state, {:continue, :consume_work_list}}
-      end
     end
   end
 
@@ -223,4 +230,6 @@ defmodule Jackalope.Session do
   defp execute_work({:publish, topic, payload, opts}) do
     TortoiseClient.publish(topic, payload, opts)
   end
+
+  defp expired?(expiration), do: WorkList.after?(WorkList.expiration(0), expiration)
 end
