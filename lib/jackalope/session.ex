@@ -15,7 +15,7 @@ defmodule Jackalope.Session do
   require Logger
 
   alias __MODULE__, as: State
-  alias Jackalope.{WorkList, TortoiseClient}
+  alias Jackalope.{TortoiseClient, WorkList}
 
   defstruct connection_status: :offline,
             handler: nil,

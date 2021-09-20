@@ -4,20 +4,24 @@ defmodule Jackalope.WorkList do
   """
   use GenServer
 
+  @doc "Starts the CubQ process"
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @doc "Stops the CubQ process"
   def stop() do
     GenServer.stop(__MODULE__, :normal)
   catch
     :exit, _ -> :ok
   end
 
+  @doc "Pushes a work item onto the CubQ stack"
   def push(item) do
     GenServer.call(__MODULE__, {:push, item})
   end
 
+  @doc "Pops the most recently added work item off the CubQ stack"
   def pop() do
     GenServer.call(__MODULE__, :pop)
   end
@@ -48,6 +52,7 @@ defmodule Jackalope.WorkList do
     {:reply, CubQ.push(state.queue, item), state}
   end
 
+  @impl GenServer
   def handle_call(:pop, _from, state) do
     {:reply, CubQ.pop(state.queue), state}
   end
