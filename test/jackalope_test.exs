@@ -108,6 +108,19 @@ defmodule JackalopeTest do
     end
   end
 
+  describe "bounded work list" do
+    test "dropping work orders", context do
+      _ = connect(context, max_work_list_size: 10)
+
+      for i <- 1..15 do
+        assert :ok = Jackalope.publish({"foo", qos: 1}, %{"msg" => "hello #{i}"})
+      end
+
+      work_list = Jackalope.Session.status() |> Map.fetch!(:work_list)
+      assert Enum.count(work_list) == 10
+    end
+  end
+
   # Apologies for the mess after this point; these are helpers that
   # makes it easier to assert that a subscription has been placed, and
   # acknowledge that subscription; assert that a publish has been
@@ -130,18 +143,37 @@ defmodule JackalopeTest do
 
     handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
     initial_topics = Keyword.get(opts, :initial_topics)
+    max_work_list_size = Keyword.get(opts, :max_work_list_size, :infinity)
+    # Timing issue hack: Make sure the Session is fully terminated before we reconnect
+    # and have the Jackelope supervisor initiated another of the same name
+    kill_session()
 
-    assert {:ok, pid} =
-             Jackalope.start_link(
-               server: transport,
-               client_id: client_id,
-               handler: handler,
-               initial_topics: initial_topics
-             )
+    result =
+      Jackalope.start_link(
+        server: transport,
+        client_id: client_id,
+        handler: handler,
+        initial_topics: initial_topics,
+        max_work_list_size: max_work_list_size
+      )
+
+    pid =
+      case result do
+        {:ok, pid} -> pid
+        {:error, {:already_started, pid}} -> pid
+      end
+
+    assert is_pid(pid)
 
     assert_receive {MqttServer, {:received, %Package.Connect{client_id: ^client_id}}}
     assert_receive {MqttServer, :completed}
     {:ok, pid}
+  end
+
+  defp kill_session() do
+    GenServer.stop(Jackalope.Session, :shutdown)
+  catch
+    :exit, _ -> :ok
   end
 
   defp expect_publish(context, %Package.Publish{qos: 0} = publish) do
