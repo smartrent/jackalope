@@ -21,10 +21,11 @@ defmodule Jackalope.Session do
             handler: nil,
             work_list: [],
             pending: %{},
-            subscriptions: %{}
+            subscriptions: %{},
+            max_work_list_size: nil
 
   def start_link(opts) do
-    Logger.info("[Jackalope] Starting #{inspect(__MODULE__)}...")
+    Logger.info("[Jackalope] Starting #{inspect(__MODULE__)} with #{inspect(opts)}")
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
@@ -111,12 +112,17 @@ defmodule Jackalope.Session do
     handler = Keyword.fetch!(opts, :handler)
     # Produce subscription commands for the initial subscriptions
     initial_topics = Keyword.get(opts, :initial_topics)
+    max_work_list_size = Keyword.get(opts, :max_work_list_size, :infinity)
 
     work_list =
       for topic_filter <- List.wrap(initial_topics),
           do: {{:subscribe, topic_filter, []}, []}
 
-    initial_state = %State{work_list: work_list, handler: handler}
+    initial_state = %State{
+      max_work_list_size: max_work_list_size,
+      work_list: work_list,
+      handler: handler
+    }
 
     {:ok, initial_state, {:continue, :consume_work_list}}
   end
@@ -158,6 +164,7 @@ defmodule Jackalope.Session do
             ),
             state.work_list
           ])
+          |> bound(state.max_work_list_size)
     }
 
     {:noreply, state}
@@ -206,7 +213,12 @@ defmodule Jackalope.Session do
 
       {:error, reason} ->
         Logger.warn("Retrying message, failed with reason: #{inspect(reason)}")
-        state = %State{state | work_list: [work_order | state.work_list]}
+
+        state = %State{
+          state
+          | work_list: bound([work_order | state.work_list], state.max_work_list_size)
+        }
+
         {:noreply, state}
     end
   end
@@ -227,7 +239,7 @@ defmodule Jackalope.Session do
     # we retry a message it will reenter the work list at the front,
     # and it could already have messages, etc.
     work_list = [{cmd, opts} | work_list]
-    state = %State{state | work_list: work_list}
+    state = %State{state | work_list: bound(work_list, state.max_work_list_size)}
     {:noreply, state, {:continue, :consume_work_list}}
   end
 
@@ -250,6 +262,7 @@ defmodule Jackalope.Session do
             ),
             state.work_list
           ])
+          |> bound(state.max_work_list_size)
     }
 
     {:noreply, state}
@@ -291,7 +304,8 @@ defmodule Jackalope.Session do
           {:noreply, state, {:continue, :consume_work_list}}
 
         {:error, :no_connection} ->
-          {:noreply, %{state | work_list: [work_order | remaining]}}
+          {:noreply,
+           %{state | work_list: bound([work_order | remaining], state.max_work_list_size)}}
       end
     else
       # drop the message, it is outside of the time to live
@@ -304,7 +318,53 @@ defmodule Jackalope.Session do
     end
   end
 
+  defp bound(work_list, max_size) do
+    current_size = Enum.count(work_list)
+
+    if current_size <= max_size do
+      work_list
+    else
+      Logger.warn(
+        "[Jackalope] The worklist exceeds #{max_size} (#{current_size}). Looking to shrink it."
+      )
+
+      {active_wl, deleted_count} = gc(work_list)
+
+      active_size = current_size - deleted_count
+
+      if active_size <= max_size do
+        active_wl
+      else
+        {dropped, cropped_list} = List.pop_at(active_wl, active_size - 1)
+
+        Logger.warn("[Jackalope] Dropped #{inspect(dropped)}  from oversized work list")
+
+        cropped_list
+      end
+    end
+  end
+
+  defp gc(work_list) do
+    now = System.monotonic_time(:millisecond)
+
+    {list, count} =
+      Enum.reduce(
+        work_list,
+        {[], 0},
+        fn {_cmd, opts} = work_order, {active_list, deleted_count} ->
+          ttl = Keyword.get(opts, :ttl, :infinity)
+
+          if ttl > now,
+            do: {[work_order | active_list], deleted_count},
+            else: {active_list, deleted_count + 1}
+        end
+      )
+
+    {Enum.reverse(list), count}
+  end
+
   ### PRIVATE HELPERS --------------------------------------------------
+
   defp execute_work({:publish, topic, payload, opts}) do
     TortoiseClient.publish(topic, payload, opts)
   end
