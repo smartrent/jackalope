@@ -5,11 +5,13 @@ defmodule Jackalope.WorkList do
   use GenServer
 
   @doc "Starts the CubQ process"
+  @spec start_link(list()) :: :ignore | {:error, any} | {:ok, pid}
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   @doc "Stops the CubQ process"
+  @spec stop :: :ok
   def stop() do
     GenServer.stop(__MODULE__, :normal)
   catch
@@ -17,11 +19,13 @@ defmodule Jackalope.WorkList do
   end
 
   @doc "Pushes a work item onto the CubQ stack"
+  @spec push(any) :: :ok
   def push(item) do
     GenServer.call(__MODULE__, {:push, item})
   end
 
   @doc "Pops the most recently added work item off the CubQ stack"
+  @spec pop :: nil | tuple()
   def pop() do
     GenServer.call(__MODULE__, :pop)
   end

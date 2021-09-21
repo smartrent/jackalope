@@ -286,6 +286,7 @@ defmodule Jackalope.Session do
     end
   end
 
+  # ### PRIVATE HELPERS --------------------------------------------------
   defp pop_work_order() do
     case WorkList.pop() do
       {:ok, work_order} -> work_order
@@ -296,8 +297,6 @@ defmodule Jackalope.Session do
   defp push_work_order(work_order) do
     :ok = WorkList.push(work_order)
   end
-
-  # ### PRIVATE HELPERS --------------------------------------------------
 
   defp execute_work({:publish, topic, payload, opts}) do
     TortoiseClient.publish(topic, payload, opts)
