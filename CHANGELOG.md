@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.0
+
+* Updates
+  * Session work list can be bounded to a set size
+
 ## v0.3.0
 
 * Updates
