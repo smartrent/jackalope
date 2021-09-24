@@ -31,6 +31,39 @@ defmodule JackalopeTest do
     end
   end
 
+  describe "memory usage for persistence" do
+    test "work list repopulated by disconnection", context do
+      _ = connect(context)
+
+      assert :ok = Jackalope.subscribe({"a/b", qos: 0})
+      assert :ok = Jackalope.subscribe({"b/c", qos: 0})
+      assert :ok = Jackalope.subscribe({"c/d", qos: 0})
+      assert :ok = Jackalope.subscribe({"d/e", qos: 0})
+      assert :ok = Jackalope.subscribe({"e/f", qos: 0})
+      assert :ok = Jackalope.subscribe({"f/g", qos: 0})
+      assert :ok = Jackalope.subscribe({"g/h", qos: 0})
+      assert :ok = Jackalope.subscribe({"h/i", qos: 0})
+      assert :ok = Jackalope.subscribe({"i/j", qos: 0})
+      assert :ok = Jackalope.subscribe({"j/k", qos: 0})
+
+      IO.inspect(:memsup.get_memory_data(), label: "MEMORY DATA")
+      IO.inspect(:disksup.get_disk_data(), label: "DISK DATA")
+      # IO.inspect(:disksup.get_almost_full_threshold(), label: "Threshold of disk utilization")
+      assert :ok = Jackalope.subscribe({"k/l", qos: 0})
+      assert :ok = Jackalope.subscribe({"l/m", qos: 0})
+      assert :ok = Jackalope.subscribe({"m/n", qos: 0})
+      assert :ok = Jackalope.subscribe({"n/o", qos: 0})
+      assert :ok = Jackalope.subscribe({"o/p", qos: 0})
+      assert :ok = Jackalope.subscribe({"p/q", qos: 0})
+      assert :ok = Jackalope.subscribe({"q/r", qos: 0})
+      assert :ok = Jackalope.subscribe({"r/s", qos: 0})
+      assert :ok = Jackalope.subscribe({"s/t", qos: 0})
+      assert :ok = Jackalope.subscribe({"t/u", qos: 0})
+
+
+    end
+  end
+
   describe "start_link/1" do
     test "connect to a MQTT server (tcp)", context do
       transport = setup_server(context)

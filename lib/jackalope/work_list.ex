@@ -31,16 +31,20 @@ defmodule Jackalope.WorkList do
   end
 
   @impl GenServer
+  @spec init(keyword) ::
+          {:ok, %{db: atom | pid | {atom, any} | {:via, atom, any}, queue: any, queue_name: any}}
   def init(opts) do
     data_dir = Keyword.get(opts, :data_dir)
     db_name = Keyword.get(opts, :db_name)
     queue_name = Keyword.get(opts, :queue_name)
 
     db =
-      case CubDB.start_link(data_dir: data_dir, name: db_name) do
+      case CubDB.start_link(data_dir: data_dir, name: db_name, auto_compact: true) do
         {:ok, pid} -> pid
         {:error, {:already_started, pid}} -> pid
       end
+
+    CubDB.set_auto_file_sync(db, false)
 
     queue =
       case CubQ.start_link(db: db, queue: queue_name) do
@@ -53,11 +57,19 @@ defmodule Jackalope.WorkList do
 
   @impl GenServer
   def handle_call({:push, item}, _from, state) do
+    read_cubdb(state)
     {:reply, CubQ.push(state.queue, item), state}
   end
 
   @impl GenServer
   def handle_call(:pop, _from, state) do
     {:reply, CubQ.pop(state.queue), state}
+  end
+
+  defp read_cubdb(state) do
+    state.db
+    |> CubDB.current_db_file()
+    |> File.read()
+    |> IO.inspect(label: "CubDB contents")
   end
 end
