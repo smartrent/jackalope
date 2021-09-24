@@ -37,10 +37,12 @@ defmodule Jackalope.WorkList do
     queue_name = Keyword.get(opts, :queue_name)
 
     db =
-      case CubDB.start_link(data_dir: data_dir, name: db_name) do
+      case CubDB.start_link(data_dir: data_dir, name: db_name, auto_compact: true) do
         {:ok, pid} -> pid
         {:error, {:already_started, pid}} -> pid
       end
+
+    CubDB.set_auto_file_sync(db, false)
 
     queue =
       case CubQ.start_link(db: db, queue: queue_name) do
