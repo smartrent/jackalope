@@ -311,4 +311,7 @@ defmodule Jackalope.Session do
     # the future, keeping it to make future upgrades easier
     TortoiseClient.unsubscribe(topic_filter, opts)
   end
+
+  # For testing
+  defp execute_work({:do_nothing, _args, _opts}), do: {:error, :no_connection}
 end

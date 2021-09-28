@@ -2,7 +2,6 @@ defmodule JackalopeTest do
   use ExUnit.Case, async: false
   doctest Jackalope
 
-  alias Jackalope.Session
   alias JackalopeTest.ScriptedMqttServer, as: MqttServer
   alias Tortoise.Package
 
@@ -14,18 +13,48 @@ defmodule JackalopeTest do
   end
 
   describe "persistence" do
-    test "work list repopulated by disconnection", context do
+    test "work list preserved through disconnection", context do
       _ = connect(context)
+      Jackalope.WorkList.remove_all()
 
-      assert :ok = Jackalope.subscribe({"persist/please", qos: 0})
-      assert :ok = Jackalope.subscribe({"another/persist", qos: 0})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "first/hi", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "second/hello", [qos: 0]}, []})
+      size = Jackalope.WorkList.size()
       {:ok, _} = disconnect(context)
+      assert size == Jackalope.WorkList.size()
+    end
+  end
 
-      assert {:ok, {{:subscribe, "persist/please", [qos: 0]}, [ttl: :infinity]}} =
-               Jackalope.WorkList.pop()
+  describe "bounded work list" do
+    test "dropping work orders", context do
+      _ = connect(context, max_work_list_size: 3)
+      Jackalope.WorkList.remove_all()
+      assert 0 == Jackalope.WorkList.size()
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "first/hi", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "second/hello", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "third/sup", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "fourth/a", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "fifth/b", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "sixth/c", [qos: 0]}, []})
+      # Give the Session time to put back the "failed" work orders on the work list
+      Process.sleep(500)
+      assert Jackalope.WorkList.size() == 3
+    end
 
-      assert {:ok, {{:subscribe, "another/persist", [qos: 0]}, [ttl: :infinity]}} =
-               Jackalope.WorkList.pop()
+    test "dropping expired work orders", context do
+      _ = connect(context, max_work_list_size: 3)
+      Jackalope.WorkList.remove_all()
+
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "a/b", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "remove/me", []}, [ttl: -1]})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "b/c", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "c/d", [qos: 0]}, []})
+      # Give the Session time to put back the "failed" work orders on the work list
+      Process.sleep(500)
+
+      assert {:ok, {{:do_nothing, "c/d", [qos: 0]}, []}} == Jackalope.WorkList.pop()
+      assert {:ok, {{:do_nothing, "b/c", [qos: 0]}, []}} == Jackalope.WorkList.pop()
+      assert {:ok, {{:do_nothing, "a/b", [qos: 0]}, []}} == Jackalope.WorkList.pop()
 
       assert nil == Jackalope.WorkList.pop()
     end
@@ -150,19 +179,36 @@ defmodule JackalopeTest do
 
     handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
     initial_topics = Keyword.get(opts, :initial_topics)
+    max_work_list_size = Keyword.get(opts, :max_work_list_size, :infinity)
     Jackalope.WorkList.stop()
+    kill_session()
 
-    assert {:ok, pid} =
-             Jackalope.start_link(
-               server: transport,
-               client_id: client_id,
-               handler: handler,
-               initial_topics: initial_topics
-             )
+    result =
+      Jackalope.start_link(
+        server: transport,
+        client_id: client_id,
+        handler: handler,
+        initial_topics: initial_topics,
+        max_work_list_size: max_work_list_size
+      )
+
+    pid =
+      case result do
+        {:ok, pid} -> pid
+        {:error, {:already_started, pid}} -> pid
+      end
+
+    assert is_pid(pid)
 
     assert_receive {MqttServer, {:received, %Package.Connect{client_id: ^client_id}}}
     assert_receive {MqttServer, :completed}
     {:ok, pid}
+  end
+
+  defp kill_session() do
+    GenServer.stop(Jackalope.Session, :shutdown)
+  catch
+    :exit, _ -> :ok
   end
 
   defp expect_publish(context, %Package.Publish{qos: 0} = publish) do
