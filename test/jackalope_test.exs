@@ -31,6 +31,30 @@ defmodule JackalopeTest do
     end
   end
 
+  describe "bounded work list" do
+    test "dropping work orders", context do
+      _ = connect(context, max_work_list_size: 3)
+
+      assert :ok = Jackalope.subscribe({"first/hi", qos: 0})
+      assert :ok = Jackalope.subscribe({"second/hello", qos: 0})
+      assert :ok = Jackalope.subscribe({"third/sup", qos: 0})
+      assert :ok = Jackalope.subscribe({"toomany/a", qos: 0})
+      assert :ok = Jackalope.subscribe({"exceed/b", qos: 0})
+      assert :ok = Jackalope.subscribe({"lots/c", qos: 0})
+
+      assert {:ok, {{:subscribe, "third/sup", [qos: 0]}, [ttl: :infinity]}} =
+               Jackalope.WorkList.pop()
+
+      assert {:ok, {{:subscribe, "second/hello", [qos: 0]}, [ttl: :infinity]}} =
+               Jackalope.WorkList.pop()
+
+      assert {:ok, {{:subscribe, "first/hi", [qos: 0]}, [ttl: :infinity]}} =
+               Jackalope.WorkList.pop()
+
+      assert nil = Jackalope.WorkList.pop()
+    end
+  end
+
   describe "start_link/1" do
     test "connect to a MQTT server (tcp)", context do
       transport = setup_server(context)
@@ -150,19 +174,56 @@ defmodule JackalopeTest do
 
     handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
     initial_topics = Keyword.get(opts, :initial_topics)
-    Jackalope.WorkList.stop()
+    max_work_list_size = Keyword.get(opts, :max_work_list_size, :infinity)
+    # Jackalope.WorkList.stop()
+    kill_session()
 
-    assert {:ok, pid} =
-             Jackalope.start_link(
-               server: transport,
-               client_id: client_id,
-               handler: handler,
-               initial_topics: initial_topics
-             )
+    result =
+      Jackalope.start_link(
+        server: transport,
+        client_id: client_id,
+        handler: handler,
+        initial_topics: initial_topics,
+        max_work_list_size: max_work_list_size
+      )
+
+    pid =
+      case result do
+        {:ok, pid} -> pid
+        {:error, {:already_started, pid}} -> pid
+      end
+
+    assert is_pid(pid)
 
     assert_receive {MqttServer, {:received, %Package.Connect{client_id: ^client_id}}}
     assert_receive {MqttServer, :completed}
     {:ok, pid}
+  end
+
+  # defp connect(%{client_id: client_id} = context, opts \\ []) do
+  #   transport = setup_server(context)
+
+  #   handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
+  #   initial_topics = Keyword.get(opts, :initial_topics)
+  #   Jackalope.WorkList.stop()
+
+  #   assert {:ok, pid} =
+  #            Jackalope.start_link(
+  #              server: transport,
+  #              client_id: client_id,
+  #              handler: handler,
+  #              initial_topics: initial_topics
+  #            )
+
+  #   assert_receive {MqttServer, {:received, %Package.Connect{client_id: ^client_id}}}
+  #   assert_receive {MqttServer, :completed}
+  #   {:ok, pid}
+  # end
+
+  defp kill_session() do
+    GenServer.stop(Jackalope.Session, :shutdown)
+  catch
+    :exit, _ -> :ok
   end
 
   defp expect_publish(context, %Package.Publish{qos: 0} = publish) do

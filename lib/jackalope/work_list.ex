@@ -3,6 +3,7 @@ defmodule Jackalope.WorkList do
   A genserver wrapper for CubQ which we leverage to store and restore worklist tasks during disconnections
   """
   use GenServer
+  require Logger
 
   @doc "Starts the CubQ process"
   @spec start_link(list()) :: :ignore | {:error, any} | {:ok, pid}
@@ -35,6 +36,7 @@ defmodule Jackalope.WorkList do
     data_dir = Keyword.get(opts, :data_dir)
     db_name = Keyword.get(opts, :db_name)
     queue_name = Keyword.get(opts, :queue_name)
+    list_max = Keyword.get(opts, :max_work_list_size)
 
     db =
       case CubDB.start_link(data_dir: data_dir, name: db_name, auto_compact: true) do
@@ -50,12 +52,21 @@ defmodule Jackalope.WorkList do
         {:error, {:already_started, pid}} -> pid
       end
 
-    {:ok, %{db: db, queue: queue, queue_name: queue_name}}
+    {:ok, %{db: db, queue: queue, queue_name: queue_name, max_work_list_size: list_max}}
   end
 
   @impl GenServer
   def handle_call({:push, item}, _from, state) do
-    {:reply, CubQ.push(state.queue, item), state}
+    if CubDB.size(state.db) < state.max_work_list_size do
+      IO.inspect(item, label: "Pushed to queue")
+      {:reply, CubQ.push(state.queue, item), state}
+    else
+      Logger.warn(
+        "[Jackalope] The worklist exceeds #{state.max_work_list_size}. Cannot add #{item} to the queue."
+      )
+
+      {:reply, state.queue, state}
+    end
   end
 
   @impl GenServer

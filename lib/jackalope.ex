@@ -56,6 +56,11 @@ defmodule Jackalope do
     connection. This value should only be used for testing and
     development;.
 
+  - `max_work_list_size` (default: :infinity) specifies the maximum
+    number of unexpired work orders Jackalope will retain in its work list
+    (the commands yet to be sent to the MQTT server). When the maximum is
+    reached, the oldest work order is dropped before adding a new work order.
+
   - `last_will` (default: nil) specifies the last will message that
     should get published on the MQTT broker if the connection is
     closed or dropped unexpectedly. If we want to specify a last will
@@ -87,11 +92,17 @@ defmodule Jackalope do
     client_id = Keyword.get(opts, :client_id, "jackalope")
     initial_topics = Keyword.get(opts, :initial_topics)
     jackalope_handler = Keyword.get(opts, :handler, Jackalope.Handler.Logger)
+    list_max = Keyword.get(opts, :max_work_list_size, :infinity)
 
     children = [
       # The queue contains the work list
       {Jackalope.WorkList,
-       [queue_name: :saved_worklist, db_name: :saved_worklist_db, data_dir: @data_dir]},
+       [
+         queue_name: :saved_worklist,
+         db_name: :saved_worklist_db,
+         max_work_list_size: list_max,
+         data_dir: @data_dir
+       ]},
       {Jackalope.Session, [initial_topics: initial_topics, handler: jackalope_handler]},
       {Jackalope.Supervisor,
        [
