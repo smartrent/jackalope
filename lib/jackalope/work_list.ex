@@ -56,21 +56,42 @@ defmodule Jackalope.WorkList do
   end
 
   @impl GenServer
-  def handle_call({:push, item}, _from, state) do
-    if CubDB.size(state.db) < state.max_work_list_size do
-      IO.inspect(item, label: "Pushed to queue")
-      {:reply, CubQ.push(state.queue, item), state}
-    else
-      Logger.warn(
-        "[Jackalope] The worklist exceeds #{state.max_work_list_size}. Cannot add #{item} to the queue."
-      )
-
-      {:reply, state.queue, state}
-    end
-  end
-
-  @impl GenServer
   def handle_call(:pop, _from, state) do
     {:reply, CubQ.pop(state.queue), state}
   end
+
+  @impl GenServer
+  def handle_call({:push, item}, _from, state) do
+    max = state.max_work_list_size
+    first_count = CubDB.size(state.db)
+    if first_count > max do
+      remove_expired(state, first_count)
+    end
+
+    second_count = CubDB.size(state.db)
+    if second_count > max do
+      {:ok, item_to_be_removed} = CubQ.dequeue(state.queue)
+      Logger.warn("[Jackalope] The worklist exceeds #{max}. #{item_to_be_removed} will be removed from the queue.")
+    end
+
+    {:reply, CubQ.push(state.queue, item), state}
+  end
+
+  defp remove_expired(state, count) do
+    for _i <- 1..count do
+      {:ok, item} = CubQ.dequeue(state.queue)
+      if keep?(item) do
+        CubQ.push(state.queue, item)
+      else
+        Logger.warn("[Jackalope] #{item} removed from the queue due to size constraints.")
+      end
+    end
+  end
+
+  defp keep?({:ok, item}) do
+    now = System.monotonic_time(:millisecond)
+    ttl = Keyword.get(item, :ttl, :infinity)
+    ttl > now
+  end
+
 end

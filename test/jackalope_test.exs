@@ -38,18 +38,33 @@ defmodule JackalopeTest do
       assert :ok = Jackalope.subscribe({"first/hi", qos: 0})
       assert :ok = Jackalope.subscribe({"second/hello", qos: 0})
       assert :ok = Jackalope.subscribe({"third/sup", qos: 0})
-      assert :ok = Jackalope.subscribe({"toomany/a", qos: 0})
-      assert :ok = Jackalope.subscribe({"exceed/b", qos: 0})
-      assert :ok = Jackalope.subscribe({"lots/c", qos: 0})
+      assert :ok = Jackalope.subscribe({"fourth/a", qos: 0})
+      assert :ok = Jackalope.subscribe({"fifth/b", qos: 0})
+      assert :ok = Jackalope.subscribe({"sixth/c", qos: 0})
 
-      assert {:ok, {{:subscribe, "third/sup", [qos: 0]}, [ttl: :infinity]}} =
+      assert {:ok, {{:subscribe, "sixth/c", [qos: 0]}, [ttl: :infinity]}} =
                Jackalope.WorkList.pop()
 
-      assert {:ok, {{:subscribe, "second/hello", [qos: 0]}, [ttl: :infinity]}} =
+      assert {:ok, {{:subscribe, "fifth/b", [qos: 0]}, [ttl: :infinity]}} =
                Jackalope.WorkList.pop()
 
-      assert {:ok, {{:subscribe, "first/hi", [qos: 0]}, [ttl: :infinity]}} =
+      assert {:ok, {{:subscribe, "fourth/c", [qos: 0]}, [ttl: :infinity]}} =
                Jackalope.WorkList.pop()
+
+      assert nil = Jackalope.WorkList.pop()
+    end
+
+    test "dropping expired work orders", context do
+      _ = connect(context, max_work_list_size: 3)
+
+      assert :ok = Jackalope.subscribe({"a/b", qos: 0})
+      assert :ok = Jackalope.subscribe("remove/me", ttl: -576_460_690_328)
+      assert :ok = Jackalope.subscribe({"b/c", qos: 0})
+      assert :ok = Jackalope.subscribe({"c/d", qos: 0})
+
+      assert {:ok, {{:subscribe, "a/b", [qos: 0]}, [ttl: :infinity]}} = Jackalope.WorkList.pop()
+      assert {:ok, {{:subscribe, "b/c", [qos: 0]}, [ttl: :infinity]}} = Jackalope.WorkList.pop()
+      assert {:ok, {{:subscribe, "c/d", [qos: 0]}, [ttl: :infinity]}} = Jackalope.WorkList.pop()
 
       assert nil = Jackalope.WorkList.pop()
     end
