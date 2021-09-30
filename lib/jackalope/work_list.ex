@@ -22,13 +22,26 @@ defmodule Jackalope.WorkList do
   @doc "Pushes a work item onto the CubQ stack"
   @spec push(any) :: :ok
   def push(item) do
+    Logger.info("[Jackalope] WorkList - PUSH #{inspect(item)}")
     GenServer.call(__MODULE__, {:push, item})
   end
 
   @doc "Pops the most recently added work item off the CubQ stack"
   @spec pop :: nil | tuple()
   def pop() do
-    GenServer.call(__MODULE__, :pop)
+    item = GenServer.call(__MODULE__, :pop)
+    Logger.info("[Jackalope] WorkList - POPPED #{inspect(item)}")
+    item
+  end
+
+  @doc false
+  def size() do
+    GenServer.call(__MODULE__, :size)
+  end
+
+  @doc false
+  def remove_all() do
+    GenServer.cast(__MODULE__, :remove_all)
   end
 
   @impl GenServer
@@ -52,46 +65,93 @@ defmodule Jackalope.WorkList do
         {:error, {:already_started, pid}} -> pid
       end
 
-    {:ok, %{db: db, queue: queue, queue_name: queue_name, max_work_list_size: list_max}}
+    {:ok,
+     %{
+       db: db,
+       queue: queue,
+       queue_name: queue_name,
+       max_work_list_size: list_max
+     }}
   end
 
   @impl GenServer
   def handle_call(:pop, _from, state) do
-    {:reply, CubQ.pop(state.queue), state}
+    result =
+      case CubQ.pop(state.queue) do
+        {:ok, {item, _expiration}} -> {:ok, item}
+        nil -> nil
+      end
+
+    {:reply, result, state}
   end
 
   @impl GenServer
   def handle_call({:push, item}, _from, state) do
     max = state.max_work_list_size
-    first_count = CubDB.size(state.db)
-    if first_count > max do
-      remove_expired(state, first_count)
-    end
 
-    second_count = CubDB.size(state.db)
-    if second_count > max do
-      {:ok, item_to_be_removed} = CubQ.dequeue(state.queue)
-      Logger.warn("[Jackalope] The worklist exceeds #{max}. #{item_to_be_removed} will be removed from the queue.")
-    end
+    _ =
+      if size(state) >= max do
+        _ = remove_expired(state)
+        excess = size(state) - max
 
-    {:reply, CubQ.push(state.queue, item), state}
+        if excess >= 0 do
+          # Make room for the new item if at max or more
+          for _i <- 1..(excess + 1) do
+            {:ok, item_removed} = CubQ.dequeue(state.queue)
+
+            Logger.warn(
+              "[Jackalope] WorkList - The worklist still exceeds #{max}. #{inspect(item_removed)} was removed from the queue."
+            )
+          end
+        end
+      end
+
+    expiration = expiration(item)
+    {:reply, CubQ.push(state.queue, {item, expiration}), state}
   end
 
-  defp remove_expired(state, count) do
-    for _i <- 1..count do
-      {:ok, item} = CubQ.dequeue(state.queue)
-      if keep?(item) do
-        CubQ.push(state.queue, item)
+  def handle_call(:size, _from, state) do
+    {:reply, size(state), state}
+  end
+
+  @impl GenServer
+  def handle_cast(:remove_all, state) do
+    _ = CubQ.delete_all(state.queue)
+    {:noreply, state}
+  end
+
+  defp remove_expired(state) do
+    Logger.info("[Jackalope] WorkList - Removing expired work orders")
+
+    for _i <- 1..size(state) do
+      # remove from begining
+      {:ok, item_with_expiration} = CubQ.dequeue(state.queue)
+
+      if keep?(item_with_expiration) do
+        Logger.debug("[Jackalope] WorkList - Keeping #{inspect(item_with_expiration)}")
+        # same as push (insert at end)
+        :ok = CubQ.enqueue(state.queue, item_with_expiration)
       else
-        Logger.warn("[Jackalope] #{item} removed from the queue due to size constraints.")
+        Logger.warn(
+          "[Jackalope] #{inspect(item_with_expiration)} removed from the queue due to expiration. Size is #{size(state)}"
+        )
       end
     end
   end
 
-  defp keep?({:ok, item}) do
-    now = System.monotonic_time(:millisecond)
-    ttl = Keyword.get(item, :ttl, :infinity)
-    ttl > now
+  defp size(state), do: CubDB.size(state.db)
+
+  defp keep?({_item, expiration}) do
+    now = System.monotonic_time(:second)
+    expiration == :infinity or expiration >= now
   end
 
+  defp ttl({_cmd, opts}), do: Keyword.get(opts, :ttl, :infinity)
+
+  defp expiration(item) do
+    case ttl(item) do
+      :infinity -> :infinity
+      seconds -> System.monotonic_time(:second) + seconds
+    end
+  end
 end

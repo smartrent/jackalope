@@ -2,7 +2,6 @@ defmodule JackalopeTest do
   use ExUnit.Case, async: false
   doctest Jackalope
 
-  alias Jackalope.Session
   alias JackalopeTest.ScriptedMqttServer, as: MqttServer
   alias Tortoise.Package
 
@@ -14,59 +13,50 @@ defmodule JackalopeTest do
   end
 
   describe "persistence" do
-    test "work list repopulated by disconnection", context do
+    test "work list preserved through disconnection", context do
       _ = connect(context)
+      Jackalope.WorkList.remove_all()
 
-      assert :ok = Jackalope.subscribe({"persist/please", qos: 0})
-      assert :ok = Jackalope.subscribe({"another/persist", qos: 0})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "first/hi", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "second/hello", [qos: 0]}, []})
+      size = Jackalope.WorkList.size()
       {:ok, _} = disconnect(context)
-
-      assert {:ok, {{:subscribe, "persist/please", [qos: 0]}, [ttl: :infinity]}} =
-               Jackalope.WorkList.pop()
-
-      assert {:ok, {{:subscribe, "another/persist", [qos: 0]}, [ttl: :infinity]}} =
-               Jackalope.WorkList.pop()
-
-      assert nil == Jackalope.WorkList.pop()
+      assert size == Jackalope.WorkList.size()
     end
   end
 
   describe "bounded work list" do
     test "dropping work orders", context do
       _ = connect(context, max_work_list_size: 3)
-
-      assert :ok = Jackalope.subscribe({"first/hi", qos: 0})
-      assert :ok = Jackalope.subscribe({"second/hello", qos: 0})
-      assert :ok = Jackalope.subscribe({"third/sup", qos: 0})
-      assert :ok = Jackalope.subscribe({"fourth/a", qos: 0})
-      assert :ok = Jackalope.subscribe({"fifth/b", qos: 0})
-      assert :ok = Jackalope.subscribe({"sixth/c", qos: 0})
-
-      assert {:ok, {{:subscribe, "sixth/c", [qos: 0]}, [ttl: :infinity]}} =
-               Jackalope.WorkList.pop()
-
-      assert {:ok, {{:subscribe, "fifth/b", [qos: 0]}, [ttl: :infinity]}} =
-               Jackalope.WorkList.pop()
-
-      assert {:ok, {{:subscribe, "fourth/c", [qos: 0]}, [ttl: :infinity]}} =
-               Jackalope.WorkList.pop()
-
-      assert nil = Jackalope.WorkList.pop()
+      Jackalope.WorkList.remove_all()
+      assert 0 == Jackalope.WorkList.size()
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "first/hi", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "second/hello", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "third/sup", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "fourth/a", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "fifth/b", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "sixth/c", [qos: 0]}, []})
+      # Give the Session time to put back the "failed" work orders on the work list
+      Process.sleep(500)
+      assert Jackalope.WorkList.size() == 3
     end
 
     test "dropping expired work orders", context do
       _ = connect(context, max_work_list_size: 3)
+      Jackalope.WorkList.remove_all()
 
-      assert :ok = Jackalope.subscribe({"a/b", qos: 0})
-      assert :ok = Jackalope.subscribe("remove/me", ttl: -576_460_690_328)
-      assert :ok = Jackalope.subscribe({"b/c", qos: 0})
-      assert :ok = Jackalope.subscribe({"c/d", qos: 0})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "a/b", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "remove/me", []}, [ttl: -1]})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "b/c", [qos: 0]}, []})
+      assert :ok == Jackalope.WorkList.push({{:do_nothing, "c/d", [qos: 0]}, []})
+      # Give the Session time to put back the "failed" work orders on the work list
+      Process.sleep(500)
 
-      assert {:ok, {{:subscribe, "a/b", [qos: 0]}, [ttl: :infinity]}} = Jackalope.WorkList.pop()
-      assert {:ok, {{:subscribe, "b/c", [qos: 0]}, [ttl: :infinity]}} = Jackalope.WorkList.pop()
-      assert {:ok, {{:subscribe, "c/d", [qos: 0]}, [ttl: :infinity]}} = Jackalope.WorkList.pop()
+      assert {:ok, {{:do_nothing, "c/d", [qos: 0]}, []}} == Jackalope.WorkList.pop()
+      assert {:ok, {{:do_nothing, "b/c", [qos: 0]}, []}} == Jackalope.WorkList.pop()
+      assert {:ok, {{:do_nothing, "a/b", [qos: 0]}, []}} == Jackalope.WorkList.pop()
 
-      assert nil = Jackalope.WorkList.pop()
+      assert nil == Jackalope.WorkList.pop()
     end
   end
 
@@ -190,7 +180,7 @@ defmodule JackalopeTest do
     handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
     initial_topics = Keyword.get(opts, :initial_topics)
     max_work_list_size = Keyword.get(opts, :max_work_list_size, :infinity)
-    # Jackalope.WorkList.stop()
+    Jackalope.WorkList.stop()
     kill_session()
 
     result =
