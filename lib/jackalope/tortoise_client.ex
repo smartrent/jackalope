@@ -69,7 +69,7 @@ defmodule Jackalope.TortoiseClient do
     GenServer.call(__MODULE__, {:subscribe, topic, opts})
   end
 
-  @doc "Unubscribe the hub from a topic"
+  @doc "Unsubscribe the hub from a topic"
   @spec unsubscribe(String.t(), opts :: Keyword.t()) :: {:ok, reference()} | {:error, atom}
   def unsubscribe(topic_filter, opts \\ []) do
     GenServer.call(__MODULE__, {:unsubscribe, topic_filter, opts})
