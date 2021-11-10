@@ -66,14 +66,14 @@ defmodule Jackalope.Handler do
   errors require user intervention. The optional `handle_error/1`
   callback can help inform the surrounding system of errors.
 
-    @impl true
-    def handle_error({:publish_error, work_order, :ttl_expired}) do
-      Logger.error("Work order expired: \#{inspect(work_order)}")
-    end
+      @impl Jackalope.Handler
+      def handle_error({:publish_error, work_order, :ttl_expired}) do
+        Logger.error("Work order expired: \#{inspect(work_order)}")
+      end
 
-    def handle_error(_otherwise) do
-      _ignore = nil
-    end
+      def handle_error(_otherwise) do
+        _ignore = nil
+      end
 
   If this callback is implemented one should make sure to make a
   catch-all to prevent unhandled errors from crashing the handler.
