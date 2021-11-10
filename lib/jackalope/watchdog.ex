@@ -65,23 +65,21 @@ defmodule Jackalope.Watchdog do
 
   @impl GenServer
   def handle_info(:heartbeat, %State{client_id: client_id} = state) do
-    try do
-      answer =
-        Task.async(fn -> ping_tortoise(client_id, state.alive_timeout) end)
-        |> Task.await(state.max_wait)
+    answer =
+      Task.async(fn -> ping_tortoise(client_id, state.alive_timeout) end)
+      |> Task.await(state.max_wait)
 
-      state = %State{state | alive?: answer == :ok}
-      {:noreply, state, {:continue, :schedule_heartbeat}}
-    catch
-      :exit, reason ->
-        # Crash if the ping message was apparently not handled by Tortoise.Connection,
-        # indicating that the processing of its message queue is somehow suspended
-        Logger.warn(
-          "[Jackalope] Watchdog - Tortoise.Connection is unresponsive: #{inspect(reason)}"
-        )
+    state = %State{state | alive?: answer == :ok}
+    {:noreply, state, {:continue, :schedule_heartbeat}}
+  catch
+    :exit, reason ->
+      # Crash if the ping message was apparently not handled by Tortoise.Connection,
+      # indicating that the processing of its message queue is somehow suspended
+      Logger.warn(
+        "[Jackalope] Watchdog - Tortoise.Connection is unresponsive: #{inspect(reason)}"
+      )
 
-        raise "CRASH!"
-    end
+      raise "CRASH!"
   end
 
   defp ping_tortoise(client_id, timeout) do
