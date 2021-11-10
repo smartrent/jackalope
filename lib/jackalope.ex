@@ -79,13 +79,13 @@ defmodule Jackalope do
         that QoS=2 is not supported by AWS IoT.
 
   - TODO `backoff` make backoff a configurable value
-
   """
+  @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts) do
     Supervisor.start_link(__MODULE__, opts)
   end
 
-  @impl true
+  @impl Supervisor
   def init(opts) do
     client_id = Keyword.get(opts, :client_id, "jackalope")
     initial_topics = Keyword.get(opts, :initial_topics)
@@ -125,6 +125,7 @@ defmodule Jackalope do
   topic_filters it was subscribed to, ensuring that we are in sync
   with the subscription state.
   """
+  @spec reconnect() :: :ok
   defdelegate reconnect(), to: Jackalope.Session
 
   @doc """

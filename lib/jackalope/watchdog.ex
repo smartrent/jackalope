@@ -19,6 +19,7 @@ defmodule Jackalope.Watchdog do
   end
 
   @doc "FOR TESTING ONLY - Causes a crash"
+  @spec crash() :: :ok
   def crash() do
     GenServer.call(__MODULE__, :crash)
   end
@@ -29,12 +30,13 @@ defmodule Jackalope.Watchdog do
     GenServer.call(__MODULE__, :alive?)
   end
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     Logger.info("[Jackalope] Starting Tortoise watchdog")
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @impl true
+  @impl GenServer
   def init(opts) do
     case struct(State, opts) do
       %State{client_id: nil} ->
@@ -45,13 +47,13 @@ defmodule Jackalope.Watchdog do
     end
   end
 
-  @impl true
+  @impl GenServer
   def handle_continue(:schedule_heartbeat, %State{heartbeat_delay: timeout} = state) do
     Process.send_after(self(), :heartbeat, timeout)
     {:noreply, state}
   end
 
-  @impl true
+  @impl GenServer
   def handle_call(:alive?, _from, %State{alive?: alive?} = state) do
     {:reply, alive?, state}
   end
@@ -61,7 +63,7 @@ defmodule Jackalope.Watchdog do
     {:reply, :ok, state}
   end
 
-  @impl true
+  @impl GenServer
   def handle_info(:heartbeat, %State{client_id: client_id} = state) do
     try do
       answer =

@@ -15,6 +15,7 @@ defmodule Jackalope.Supervisor do
     Supervisor.start_link(__MODULE__, init_args, name: __MODULE__)
   end
 
+  @impl Supervisor
   def init(init_args) do
     Logger.info("[Jackalope] Starting supervisor")
 

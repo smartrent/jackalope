@@ -24,11 +24,13 @@ defmodule Jackalope.Session do
             subscriptions: %{},
             max_work_list_size: nil
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     Logger.info("[Jackalope] Starting #{inspect(__MODULE__)} with #{inspect(opts)}")
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @spec whereis() :: pid | nil
   def whereis() do
     GenServer.whereis(__MODULE__)
   end
@@ -103,11 +105,12 @@ defmodule Jackalope.Session do
   end
 
   @doc false
+  @spec reconnect() :: :ok
   def reconnect() do
     GenServer.cast(__MODULE__, :reconnect)
   end
 
-  @impl true
+  @impl GenServer
   def init(opts) do
     handler = Keyword.fetch!(opts, :handler)
     # Produce subscription commands for the initial subscriptions
@@ -127,12 +130,12 @@ defmodule Jackalope.Session do
     {:ok, initial_state, {:continue, :consume_work_list}}
   end
 
-  @impl true
+  @impl GenServer
   def handle_call(:status, _from, %State{} = state) do
     {:reply, Map.from_struct(state), state}
   end
 
-  @impl true
+  @impl GenServer
   # Connection status changes
   def handle_info({:connection_status, :up}, state) do
     state = %State{state | connection_status: :online}
@@ -223,7 +226,7 @@ defmodule Jackalope.Session do
     end
   end
 
-  @impl true
+  @impl GenServer
   def handle_cast({:cmd, cmd, opts}, %State{work_list: work_list} = state) do
     # Setup the options for the work order; so far we support time to
     # live, which allow us to specify the time a work order is allowed
@@ -268,7 +271,7 @@ defmodule Jackalope.Session do
     {:noreply, state}
   end
 
-  @impl true
+  @impl GenServer
   def handle_continue(:consume_work_list, %State{connection_status: :offline} = state) do
     # postpone consuming from the work list till we are online again!
     {:noreply, state}

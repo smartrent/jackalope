@@ -83,7 +83,7 @@ defmodule Jackalope.TortoiseClient do
 
   ### GenServer CALLBACKS
 
-  @impl true
+  @impl GenServer
   def init(opts) do
     case struct(%State{jackalope_pid: Jackalope.Session.whereis()}, opts) do
       %State{client_id: nil} ->
@@ -100,7 +100,7 @@ defmodule Jackalope.TortoiseClient do
     end
   end
 
-  @impl true
+  @impl GenServer
   def handle_continue(:spawn_connection, %State{connection: nil} = state) do
     # Attempt to spawn a tortoise connection to the MQTT server; the
     # tortoise will attempt to connect to the server, so we are not
@@ -160,7 +160,7 @@ defmodule Jackalope.TortoiseClient do
     end
   end
 
-  @impl true
+  @impl GenServer
   def handle_call(:connected?, _from, %State{connection: pid} = state) do
     tortoise_state = is_pid(pid) and Process.alive?(pid)
     {:reply, tortoise_state, state}
@@ -195,14 +195,14 @@ defmodule Jackalope.TortoiseClient do
     {:reply, do_publish(state, topic, payload, opts), state}
   end
 
-  @impl true
+  @impl GenServer
   def handle_cast(:reconnect, %State{} = state) do
     Tortoise.Connection.disconnect(state.client_id)
     state = %State{state | connection: nil}
     {:noreply, state, {:continue, :spawn_connection}}
   end
 
-  @impl true
+  @impl GenServer
   # Tortoise network status changes
   def handle_info(
         {{Tortoise, client_id}, :status, network_status},
