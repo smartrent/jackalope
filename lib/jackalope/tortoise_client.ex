@@ -23,7 +23,7 @@ defmodule Jackalope.TortoiseClient do
   end
 
   @doc "Start a Tortoise client"
-  @spec start_link(any) :: GenServer.on_start()
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(init_args) do
     Logger.info("[Jackalope] Starting Tortoise client with #{inspect(init_args)}")
     GenServer.start_link(__MODULE__, init_args, name: __MODULE__)
@@ -32,6 +32,7 @@ defmodule Jackalope.TortoiseClient do
   @doc """
   Tell Tortoise to reconnect
   """
+  @spec reconnect() :: :ok
   def reconnect() do
     GenServer.cast(__MODULE__, :reconnect)
   end
