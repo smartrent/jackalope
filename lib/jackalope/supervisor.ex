@@ -17,8 +17,6 @@ defmodule Jackalope.Supervisor do
 
   @impl Supervisor
   def init(init_args) do
-    Logger.info("[Jackalope] Starting supervisor")
-
     children = [
       # The Tortoise connection supervisor
       {DynamicSupervisor, strategy: :one_for_one, name: ConnectionSupervisor},
