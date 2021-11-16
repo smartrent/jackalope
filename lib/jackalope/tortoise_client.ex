@@ -25,7 +25,6 @@ defmodule Jackalope.TortoiseClient do
   @doc "Start a Tortoise client"
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(init_args) do
-    Logger.info("[Jackalope] Starting Tortoise client with #{inspect(init_args)}")
     GenServer.start_link(__MODULE__, init_args, name: __MODULE__)
   end
 
