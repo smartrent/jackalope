@@ -1,7 +1,7 @@
 defmodule Jackalope.TortoiseHandler do
   @moduledoc false
 
-  @behaviour Tortoise.Handler
+  @behaviour Tortoise311.Handler
 
   require Logger
 
@@ -9,7 +9,7 @@ defmodule Jackalope.TortoiseHandler do
 
   defstruct jackalope_pid: nil, handler: nil, default_last_will: nil
 
-  @impl Tortoise.Handler
+  @impl Tortoise311.Handler
   def init(opts) do
     initial_state = %State{
       handler: Keyword.fetch!(opts, :handler),
@@ -20,7 +20,7 @@ defmodule Jackalope.TortoiseHandler do
     {:ok, initial_state}
   end
 
-  @impl Tortoise.Handler
+  @impl Tortoise311.Handler
   def last_will(%State{} = state) do
     last_will = apply(state.handler, :last_will, []) || state.default_last_will
     packaged_last_will = package_last_will(last_will)
@@ -28,7 +28,7 @@ defmodule Jackalope.TortoiseHandler do
     {{:ok, packaged_last_will}, state}
   end
 
-  @impl Tortoise.Handler
+  @impl Tortoise311.Handler
   def connection(status, %State{} = state) do
     # inform the jackalope process about the connection status change
     send(state.jackalope_pid, {:connection_status, status})
@@ -40,7 +40,7 @@ defmodule Jackalope.TortoiseHandler do
     {:ok, state}
   end
 
-  @impl Tortoise.Handler
+  @impl Tortoise311.Handler
   def subscription(status, topic_filter, %State{} = state) when status in [:up, :down] do
     if function_exported?(state.handler, :subscription, 2) do
       _ignored = apply(state.handler, :subscription, [status, topic_filter])
@@ -52,7 +52,7 @@ defmodule Jackalope.TortoiseHandler do
     {:ok, state}
   end
 
-  @impl Tortoise.Handler
+  @impl Tortoise311.Handler
   def handle_message(topic_levels, payload_string, %State{handler: handler} = state) do
     case Jason.decode(payload_string) do
       {:ok, payload} ->
@@ -72,9 +72,9 @@ defmodule Jackalope.TortoiseHandler do
     end
   end
 
-  @impl Tortoise.Handler
+  @impl Tortoise311.Handler
   def terminate(_some_reason, _state) do
-    Logger.info("[Jackalope] Tortoise reports termination")
+    Logger.info("[Jackalope] Tortoise311 reports termination")
     :ok
   end
 
@@ -82,7 +82,7 @@ defmodule Jackalope.TortoiseHandler do
     if last_will != nil do
       payload_term = Keyword.get(last_will, :payload)
 
-      %Tortoise.Package.Publish{
+      %Tortoise311.Package.Publish{
         topic: Keyword.fetch!(last_will, :topic),
         payload: encode_last_will_payload(payload_term),
         qos: Keyword.get(last_will, :qos, 0),

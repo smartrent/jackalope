@@ -3,7 +3,7 @@ defmodule JackalopeTest do
   doctest Jackalope
 
   alias JackalopeTest.ScriptedMqttServer, as: MqttServer
-  alias Tortoise.Package
+  alias Tortoise311.Package
 
   setup context do
     {:ok, mqtt_server_pid} = start_supervised(MqttServer)
@@ -135,7 +135,7 @@ defmodule JackalopeTest do
 
     # Create a TCP transport for tortoise we can give to Jackalope as
     # its "server" specification
-    {Tortoise.Transport.Tcp, [host: ip, port: port]}
+    {Tortoise311.Transport.Tcp, [host: ip, port: port]}
   end
 
   defp connect(%{client_id: client_id} = context, opts \\ []) do

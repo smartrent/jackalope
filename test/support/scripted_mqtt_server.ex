@@ -15,7 +15,7 @@ defmodule JackalopeTest.ScriptedMqttServer do
             client: nil,
             server_info: nil
 
-  alias Tortoise.Package
+  alias Tortoise311.Package
   alias __MODULE__, as: State
 
   # Client API
@@ -33,7 +33,7 @@ defmodule JackalopeTest.ScriptedMqttServer do
 
   # Server callbacks
   def init(opts) do
-    transport = Keyword.get(opts, :transport, Tortoise.Transport.Tcp)
+    transport = Keyword.get(opts, :transport, Tortoise311.Transport.Tcp)
 
     transport_opts =
       case Keyword.get(opts, :opts, :default) do

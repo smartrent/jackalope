@@ -18,11 +18,11 @@ defmodule Jackalope.Supervisor do
   @impl Supervisor
   def init(init_args) do
     children = [
-      # The Tortoise connection supervisor
+      # The Tortoise311 connection supervisor
       {DynamicSupervisor, strategy: :one_for_one, name: ConnectionSupervisor},
-      # The Tortoise client
+      # The Tortoise311 client
       {TortoiseClient, init_args},
-      # The Tortoise Connection watchdog - crashes if Tortoise has become unresponsive
+      # The Tortoise311 Connection watchdog - crashes if Tortoise311 has become unresponsive
       {Watchdog, init_args}
     ]
 

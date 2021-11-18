@@ -23,7 +23,7 @@ jobs:
       - run: mix hex.build
       - run: mix test
       - run: mix format --check-formatted
-      - run: mix credo -a --strict
+      - run: mix credo --ignore-checks "refactor"
       - run: mix dialyzer
       - save_cache:
           key: v1-mix-cache-{{ checksum "mix.lock" }}
