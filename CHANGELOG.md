@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.2
+
+* Updates
+  * All references to Tortoise are replaced by Tortoise311
+
 ## v0.4.1
 
 * Updates
