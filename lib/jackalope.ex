@@ -7,7 +7,7 @@ defmodule Jackalope do
              |> Enum.fetch!(1)
 
   @default_mqtt_server {
-    Tortoise.Transport.Tcp,
+    Tortoise311.Transport.Tcp,
     host: "localhost", port: 1883
   }
 
@@ -27,7 +27,7 @@ defmodule Jackalope do
   options and their defaults are:
 
   - `client_id` (default: "jackalope"), string that will be used as
-    the client_id of the MQTT connection; see `t Tortoise.client_id`
+    the client_id of the MQTT connection; see `t Tortoise311.client_id`
     for more information on valid client ids. Notice that the
     client_id needs to be unique on the server, so two clients may not
     have the same client_id.
@@ -66,7 +66,7 @@ defmodule Jackalope do
 
       - `topic` (Required) the topic to post the last will message to;
         this should be specified as a string and it should be a valid
-        MQTT topic; consult `t Tortoise.topic` for more info on valid
+        MQTT topic; consult `t Tortoise311.topic` for more info on valid
         MQTT topics.
 
       - `payload` (default: nil) the payload of the last will message;
@@ -111,7 +111,7 @@ defmodule Jackalope do
     # Supervision strategy is rest for one, as a crash in Jackalope
     # would result in inconsistent state in Jackalope; we would not be
     # able to know about the subscription state; so we teardown the
-    # tortoise if Jackalope crash. Should the Jackalope.Supervisor
+    # tortoise311 if Jackalope crash. Should the Jackalope.Supervisor
     # crash, Jackalope should resubscribe to the topic filters it
     # currently know about, so that should be okay.
     Supervisor.init(children, strategy: :rest_for_one)
@@ -225,15 +225,15 @@ defmodule Jackalope do
     ]
   end
 
-  # Pass normal Tortoise transports through as is; assume that the
+  # Pass normal Tortoise311 transports through as is; assume that the
   # configuration is correct!
-  defp do_configure_server({Tortoise.Transport.Tcp, _opts} = keep), do: keep
-  defp do_configure_server({Tortoise.Transport.SSL, _opts} = keep), do: keep
+  defp do_configure_server({Tortoise311.Transport.Tcp, _opts} = keep), do: keep
+  defp do_configure_server({Tortoise311.Transport.SSL, _opts} = keep), do: keep
   # Attempt to create setup a connection that works with AWS IoT
   defp do_configure_server(aws_iot_opts) when is_list(aws_iot_opts) do
     # TODO improve the user experience when working with AWS IoT and
     #   then remove this raise
-    raise ArgumentError, "Please specify a Tortoise transport for the server"
+    raise ArgumentError, "Please specify a Tortoise311 transport for the server"
 
     # TODO Setup the opts for the SSL transport!
     # opts = aws_iot_opts
@@ -252,6 +252,6 @@ defmodule Jackalope do
 
     # partial_chain: &partial_chain/1
 
-    # {Tortoise.Transport.SSL, opts}
+    # {Tortoise311.Transport.SSL, opts}
   end
 end

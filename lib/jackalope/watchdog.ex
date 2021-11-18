@@ -1,8 +1,8 @@
 defmodule Jackalope.Watchdog do
   @moduledoc false
 
-  # Keeps a heartbeat on the Tortoise connection and crashes if
-  # Tortoise becomes unresponsive.
+  # Keeps a heartbeat on the Tortoise311 connection and crashes if
+  # Tortoise311 becomes unresponsive.
 
   use GenServer
   require Logger
@@ -32,7 +32,7 @@ defmodule Jackalope.Watchdog do
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
-    Logger.info("[Jackalope] Starting Tortoise watchdog")
+    Logger.info("[Jackalope] Starting Tortoise311 watchdog")
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
@@ -73,17 +73,17 @@ defmodule Jackalope.Watchdog do
     {:noreply, state, {:continue, :schedule_heartbeat}}
   catch
     :exit, reason ->
-      # Crash if the ping message was apparently not handled by Tortoise.Connection,
+      # Crash if the ping message was apparently not handled by Tortoise311.Connection,
       # indicating that the processing of its message queue is somehow suspended
       Logger.warn(
-        "[Jackalope] Watchdog - Tortoise.Connection is unresponsive: #{inspect(reason)}"
+        "[Jackalope] Watchdog - Tortoise311.Connection is unresponsive: #{inspect(reason)}"
       )
 
       raise "CRASH!"
   end
 
   defp ping_tortoise(client_id, timeout) do
-    case Tortoise.Connection.ping_sync(client_id, timeout) do
+    case Tortoise311.Connection.ping_sync(client_id, timeout) do
       {:ok, _latency} ->
         :ok
 

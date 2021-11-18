@@ -1,7 +1,7 @@
 defmodule Jackalope.TortoiseClient do
   @moduledoc false
 
-  # The Tortoise client talks to Tortoise configured to use Amazon Web
+  # The Tortoise311 client talks to Tortoise311 configured to use Amazon Web
   # Service (AWS) IoT broker over a TLS connection.
 
   use GenServer
@@ -22,14 +22,14 @@ defmodule Jackalope.TortoiseClient do
               default_qos: 1
   end
 
-  @doc "Start a Tortoise client"
+  @doc "Start a Tortoise311 client"
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(init_args) do
     GenServer.start_link(__MODULE__, init_args, name: __MODULE__)
   end
 
   @doc """
-  Tell Tortoise to reconnect
+  Tell Tortoise311 to reconnect
   """
   @spec reconnect() :: :ok
   def reconnect() do
@@ -121,7 +121,7 @@ defmodule Jackalope.TortoiseClient do
       |> Keyword.put(:client_id, state.client_id)
       |> Keyword.put(:handler, tortoise_handler)
 
-    case Tortoise.Supervisor.start_child(ConnectionSupervisor, conn_opts) do
+    case Tortoise311.Supervisor.start_child(ConnectionSupervisor, conn_opts) do
       {:ok, pid} ->
         state = %State{state | connection: pid}
         {:noreply, state, {:continue, :subscribe_to_connection}}
@@ -135,7 +135,7 @@ defmodule Jackalope.TortoiseClient do
         {:stop, {:connection_failure, reason}, state}
 
       :ignore ->
-        Logger.warn("[Jackalope] Starting Tortoise connection IGNORED!")
+        Logger.warn("[Jackalope] Starting Tortoise311 connection IGNORED!")
         {:noreply, state}
     end
   end
@@ -149,10 +149,10 @@ defmodule Jackalope.TortoiseClient do
       when is_pid(pid) do
     # Create an active subscription to the tortoise connection; this
     # will allow us to react to network up and down events as we will
-    # get a Tortoise Event when the network status changes
-    case Tortoise.Connection.connection(state.client_id, active: true) do
+    # get a Tortoise311 Event when the network status changes
+    case Tortoise311.Connection.connection(state.client_id, active: true) do
       {:ok, _connection} ->
-        {:ok, _} = Tortoise.Events.register(state.client_id, :status)
+        {:ok, _} = Tortoise311.Events.register(state.client_id, :status)
         {:noreply, state}
 
       {:error, reason} when reason in [:timeout, :unknown_connection] ->
@@ -174,7 +174,7 @@ defmodule Jackalope.TortoiseClient do
   def handle_call({:subscribe, topic, opts}, _from, %State{client_id: client_id} = state) do
     qos = Keyword.get(opts, :qos, 1)
     Logger.debug("[Jackalope] Subscribing #{client_id} to #{inspect(topic)}")
-    {:reply, Tortoise.Connection.subscribe(client_id, {topic, qos}), state}
+    {:reply, Tortoise311.Connection.subscribe(client_id, {topic, qos}), state}
   end
 
   def handle_call({:unsubscribe, topic_filter, _opts}, _from, %State{connection: nil} = state) do
@@ -188,7 +188,7 @@ defmodule Jackalope.TortoiseClient do
         %State{client_id: client_id} = state
       ) do
     Logger.info("[Jackalope] Unsubscribing #{client_id} from topic #{inspect(topic_filter)}")
-    {:reply, Tortoise.Connection.unsubscribe(client_id, topic_filter), state}
+    {:reply, Tortoise311.Connection.unsubscribe(client_id, topic_filter), state}
   end
 
   def handle_call({:publish, topic, payload, opts}, _from, %State{} = state) do
@@ -197,15 +197,15 @@ defmodule Jackalope.TortoiseClient do
 
   @impl GenServer
   def handle_cast(:reconnect, %State{} = state) do
-    Tortoise.Connection.disconnect(state.client_id)
+    Tortoise311.Connection.disconnect(state.client_id)
     state = %State{state | connection: nil}
     {:noreply, state, {:continue, :spawn_connection}}
   end
 
   @impl GenServer
-  # Tortoise network status changes
+  # Tortoise311 network status changes
   def handle_info(
-        {{Tortoise, client_id}, :status, network_status},
+        {{Tortoise311, client_id}, :status, network_status},
         %State{client_id: client_id} = state
       ) do
     case network_status do
@@ -222,7 +222,7 @@ defmodule Jackalope.TortoiseClient do
   # message--publish, subscribe, or unsubscribe--that the reference
   # relates to.
   def handle_info(
-        {{Tortoise, _client_id}, reference, result},
+        {{Tortoise311, _client_id}, reference, result},
         %State{} = state
       ) do
     send(state.jackalope_pid, {:tortoise_result, reference, result})
@@ -233,7 +233,7 @@ defmodule Jackalope.TortoiseClient do
     qos = Keyword.get(opts, :qos, state.default_qos)
     Logger.info("[Jackalope] Publishing #{topic} with payload #{payload}")
     # Async publish
-    case Tortoise.publish(client_id, topic, payload, qos: qos, timeout: 5000) do
+    case Tortoise311.publish(client_id, topic, payload, qos: qos, timeout: 5000) do
       :ok ->
         :ok
 

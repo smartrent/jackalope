@@ -9,8 +9,8 @@ defmodule Jackalope.Handler do
   Most of the callbacks are optional.
   """
 
-  @type topic :: Tortoise.topic()
-  @type topic_filter :: Tortoise.topic_filter()
+  @type topic :: Tortoise311.topic()
+  @type topic_filter :: Tortoise311.topic_filter()
   @type topic_levels :: [String.t()]
   @type payload :: term()
   @type last_will :: [topic: topic, payload: payload, qos: non_neg_integer()]
@@ -62,7 +62,7 @@ defmodule Jackalope.Handler do
   Handle errors produced by Jackalope that should be reacted to
 
   During the connection life-cycle various errors can occur, and while
-  Jackrabbit and Tortoise will try to correct the situation, some
+  Jackrabbit and Tortoise311 will try to correct the situation, some
   errors require user intervention. The optional `handle_error/1`
   callback can help inform the surrounding system of errors.
 

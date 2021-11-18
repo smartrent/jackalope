@@ -6,7 +6,7 @@
 <!-- MDOC !-->
 
 `Jackalope` is an opinionated MQTT library that simplifies the use of
-[`Tortoise MQTT`](https://hex.pm/packages/tortoise) with cloud IoT
+[`Tortoise311 MQTT`](https://hex.pm/packages/tortoise311) with cloud IoT
 services.
 
 Jackalope aims to make an interface that:

@@ -4,9 +4,9 @@ defmodule Jackalope.Session do
   # MQTT session logic
 
   # The Jackalope module will serve as a message box, tracking the
-  # status of the messages currently handled by Tortoise. This part of
+  # status of the messages currently handled by Tortoise311. This part of
   # the application is not supervised in the same supervision branch as
-  # Tortoise, so we shouldn't drop important messages if Tortoise, or
+  # Tortoise311, so we shouldn't drop important messages if Tortoise311, or
   # any of its siblings should crash; and we should retry messages that
   # was not delivered for whatever reason.
 
@@ -151,7 +151,7 @@ defmodule Jackalope.Session do
         # the current subscriptions for when we are back online. Note;
         # MQTT sessions should be able to handle this, but we do it
         # for good measure to ensure a consistent state of the world;
-        # an upcoming Tortoise version will track this state in the
+        # an upcoming Tortoise311 version will track this state in the
         # connection state, and the user can ask for it, so this
         # problem will go away in the future; also, as we add the
         # subscribe work-order at the front of the list, any
@@ -184,7 +184,7 @@ defmodule Jackalope.Session do
 
     case res do
       _unknown_ref when is_nil(work_order) ->
-        Logger.info("Received unknown ref from Tortoise: #{inspect(ref)}")
+        Logger.info("Received unknown ref from Tortoise311: #{inspect(ref)}")
         {:noreply, state}
 
       :ok ->
@@ -192,8 +192,8 @@ defmodule Jackalope.Session do
           {{:subscribe, topic, subscription_opts}, _opts} ->
             # Note that all subscriptions has to go through Jackalope;
             # for that reason we cannot use the "initial
-            # subscriptions" in Tortoise, as Jackalope would not know
-            # about them; the upcoming Tortoise will expose a function
+            # subscriptions" in Tortoise311, as Jackalope would not know
+            # about them; the upcoming Tortoise311 will expose a function
             # for the subscriptions state!
             state = %State{
               state
