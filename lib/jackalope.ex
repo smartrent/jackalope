@@ -1,6 +1,8 @@
 defmodule Jackalope do
   use Supervisor
 
+  require Logger
+
   @moduledoc "README.md"
              |> File.read!()
              |> String.split("<!-- MDOC !-->")
@@ -219,9 +221,13 @@ defmodule Jackalope do
       Keyword.get(opts, :server, @default_mqtt_server)
       |> do_configure_server()
 
+    # Default backoff options is 1 sec to 30 secs, doubling each time.
+    backoff_opts = Keyword.get(opts, :backoff) || [min_interval: 1_000, max_interval: 30_000]
+    Logger.info("[Jackalope] Connecting with backoff options #{inspect(backoff_opts)}")
+
     [
       server: server,
-      backoff: [min_interval: 100, max_interval: 30_000]
+      backoff: backoff_opts
     ]
   end
 
