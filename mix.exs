@@ -1,7 +1,7 @@
 defmodule Jackalope.MixProject do
   use Mix.Project
 
-  @version "0.4.2"
+  @version "0.5.0"
   @source_url "https://github.com/smartrent/jackalope"
 
   def project() do
@@ -35,7 +35,7 @@ defmodule Jackalope.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps() do
     [
-      {:tortoise311, "~> 0.10.0"},
+      {:tortoise311, "~> 0.11.0"},
       # {:tortoise311, git: "git@github.com:smartrent/tortoise311.git", branch: "refer_to_tortoise311"},
       {:jason, "~> 1.1"},
       {:dialyxir, "~> 1.1.0", only: [:test, :dev], runtime: false},

@@ -1,6 +1,11 @@
 # Changelog
 
-## v0.4.2
+## v0.5.0
+
+* Updates
+  * Bumped tortoise311 to 0.11
+
+## v0.4.2 - DEPRECATED
 
 * Updates
   * All references to Tortoise are replaced by Tortoise311
