@@ -5,7 +5,7 @@ defmodule Jackalope.Supervisor do
 
   use Supervisor
   require Logger
-  alias Jackalope.{TortoiseClient, Watchdog}
+  alias Jackalope.TortoiseClient
 
   @type init_arg ::
           {:app_handler, module()} | {:client_id, atom()} | {:connection_options, Keyword.t()}
@@ -21,9 +21,7 @@ defmodule Jackalope.Supervisor do
       # The Tortoise311 connection supervisor
       {DynamicSupervisor, strategy: :one_for_one, name: ConnectionSupervisor},
       # The Tortoise311 client
-      {TortoiseClient, init_args},
-      # The Tortoise311 Connection watchdog - crashes if Tortoise311 has become unresponsive
-      {Watchdog, init_args}
+      {TortoiseClient, init_args}
     ]
 
     # One goes, everyone goes
