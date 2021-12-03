@@ -36,7 +36,7 @@ defmodule Jackalope.MixProject do
   defp deps() do
     [
       {:tortoise311, "~> 0.11.0"},
-      # {:tortoise311, git: "git@github.com:smartrent/tortoise311.git", branch: "refer_to_tortoise311"},
+      # {:tortoise311, git: "git@github.com:smartrent/tortoise311.git", branch: "main"},
       {:jason, "~> 1.1"},
       {:dialyxir, "~> 1.1.0", only: [:test, :dev], runtime: false},
       {:credo, "~> 1.4", only: [:dev, :test], runtime: false},

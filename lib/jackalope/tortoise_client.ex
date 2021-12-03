@@ -130,8 +130,14 @@ defmodule Jackalope.TortoiseClient do
         state = %State{state | connection: pid}
         {:noreply, state, {:continue, :subscribe_to_connection}}
 
+      {:error, :timeout} ->
+        Logger.warn("[Jackalope] Timed out trying to create MQTT client. Trying again.")
+
+        {:noreply, state, {:continue, :spawn_connection}}
+
       {:error, reason} ->
         Logger.error("[Jackalope] Failed to create MQTT client: #{inspect(reason)}")
+
         {:stop, {:connection_failure, reason}, state}
 
       :ignore ->
@@ -154,6 +160,10 @@ defmodule Jackalope.TortoiseClient do
       {:ok, _connection} ->
         {:ok, _} = Tortoise311.Events.register(state.client_id, :status)
         {:noreply, state}
+
+      {:error, :timeout} ->
+        Logger.warn("[Jackalope] Timed out trying to subscribe to connection. Trying again.")
+        {:noreply, state, {:continue, :subscribe_to_connection}}
 
       {:error, reason} when reason in [:timeout, :unknown_connection] ->
         {:stop, {:connection_failure, reason}, state}
