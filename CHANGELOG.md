@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.1
+
+* Updates
+  * Uses backoff options
+
 ## v0.5.0
 
 * Updates

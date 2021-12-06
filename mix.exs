@@ -1,7 +1,7 @@
 defmodule Jackalope.MixProject do
   use Mix.Project
 
-  @version "0.5.0"
+  @version "0.5.1"
   @source_url "https://github.com/smartrent/jackalope"
 
   def project() do
