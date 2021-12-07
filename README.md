@@ -20,13 +20,12 @@ Jackalope aims to make an interface that:
   subscription requests while the connection is down.
 
 - Makes it impossible (or at least hard) to do things that AWS IoT
-  and other popular services do not support; such as publishing a
-  message or subscribing to a topic filter with a greater quality of
-  service than allowed, or publishing a message with the retain flag
-  set
+  does not support; such as publishing a message or subscribing to a
+  topic filter with a greater quality of service than allowed, o
+  publishing a message with the retain flag set.
 
 - Makes it easy to connect to AWS IoT with the correct encryption
-  enabled (Coming soon!)
+  enabled.
 
 Besides this Jackalope aims to provide helpers for local testing,
 allowing you to test your application without having a connection to
@@ -76,7 +75,7 @@ installed by adding `jackalope` to your list of dependencies in
 ```elixir
 def deps do
   [
-    {:jackalope, "~> 0.1.0"}
+    {:jackalope, "~> 0.5.0"}
   ]
 end
 ```

@@ -54,7 +54,22 @@ defmodule Jackalope do
     MQTT server. The default specification will attempt to connect to
     a broker running on localhost:1883, on an insecure
     connection. This value should only be used for testing and
-    development;.
+    development.
+
+    Server options for use with AWS IoT:
+
+    [
+      verify: :verify_peer,
+      host: mqtt_host(), # must return the full name, *without wild cards*, for e.g. "b4mnjg3u7t5uy9-ats.iot.us-east-1.amazonaws.com"
+      port: mqtt_port(), # must return the correct port, e.g. 443
+      alpn_advertised_protocols: ["x-amzn-mqtt-ca"],
+      server_name_indication: to_charlist(mqtt_host()),
+      cert: cert, # the device's X509 certificate in DER format
+      key: key, # the device's private key in DER format
+      cacerts: [signer_cert] ++ aws_ca_certs(), # the device's signer cert, plus AWS IoT CA certs in DER format to be returned by aws_ca_certs()
+      versions: [:"tlsv1.2"],
+      customize_hostname_check: [match_fun: :public_key.pkix_verify_hostname_match_fun(:https)]
+    ]
 
   - `max_work_list_size` (default: :infinity) specifies the maximum
     number of unexpired work orders Jackalope will retain in its work list
@@ -80,7 +95,9 @@ defmodule Jackalope do
         service the last will message should get published with; note
         that QoS=2 is not supported by AWS IoT.
 
-  - TODO `backoff` make backoff a configurable value
+  - `backoff` (default: [min_interval: 1_000, max_interval: 30_000])
+     gives the bounds of an exponential backoff algorithm used when retrying
+     from failed connections.
   """
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts) do
@@ -240,24 +257,5 @@ defmodule Jackalope do
     # TODO improve the user experience when working with AWS IoT and
     #   then remove this raise
     raise ArgumentError, "Please specify a Tortoise311 transport for the server"
-
-    # TODO Setup the opts for the SSL transport!
-    # opts = aws_iot_opts
-    # verify: :verify_peer,
-    # versions: [:"tlsv1.2"],
-
-    # host: mqtt_host(),
-    # port: mqtt_port(),
-
-    # alpn_advertised_protocols: alpn_advertised_protocols(), ?
-    # server_name_indication: server_name_indication(), ?
-
-    # cert: cert,
-    # key: key,
-    # cacerts: cacerts,
-
-    # partial_chain: &partial_chain/1
-
-    # {Tortoise311.Transport.SSL, opts}
   end
 end
