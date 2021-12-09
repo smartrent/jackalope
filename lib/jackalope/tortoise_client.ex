@@ -8,6 +8,8 @@ defmodule Jackalope.TortoiseClient do
 
   require Logger
 
+  @telemetry_delay 30_000
+
   defmodule State do
     @moduledoc false
 
@@ -19,7 +21,8 @@ defmodule Jackalope.TortoiseClient do
               publish_timeout: 30_000,
               last_will: nil,
               # at least once
-              default_qos: 1
+              default_qos: 1,
+              socket_stats: %{socket: nil, last_stats: []}
   end
 
   @doc "Start a Tortoise311 client"
@@ -83,8 +86,13 @@ defmodule Jackalope.TortoiseClient do
         {:stop, :missing_jackalope_process}
 
       %State{} = initial_state ->
-        {:ok, initial_state, {:continue, :spawn_connection}}
+        {:ok, initial_state, {:continue, :start_telemetry}}
     end
+  end
+
+  def handle_continue(:start_telemetry, state) do
+    send(self(), :capture_telemetry)
+    {:noreply, state, {:continue, :spawn_connection}}
   end
 
   @impl GenServer
@@ -169,9 +177,9 @@ defmodule Jackalope.TortoiseClient do
 
   @impl GenServer
   def handle_cast(:reconnect, %State{} = state) do
+    updated_state = capture_telemetry(state)
     Tortoise311.Connection.disconnect(state.client_id)
-    state = %State{state | connection: nil}
-    {:noreply, state, {:continue, :spawn_connection}}
+    {:noreply, %State{updated_state | connection: nil}, {:continue, :spawn_connection}}
   end
 
   @impl GenServer
@@ -199,6 +207,58 @@ defmodule Jackalope.TortoiseClient do
       ) do
     send(state.jackalope_pid, {:tortoise_result, reference, result})
     {:noreply, state}
+  end
+
+  def handle_info(:capture_telemetry, state) do
+    Process.send_after(self(), :capture_telemetry, @telemetry_delay)
+    {:noreply, capture_telemetry(state)}
+  end
+
+  defp capture_telemetry(state) do
+    client_id = state.client_id
+    registered_name = Tortoise311.Registry.via_name(Tortoise311.Connection, client_id)
+
+    case Tortoise311.Registry.meta(registered_name) do
+      {:ok, {_transport, socket}} ->
+        case ssl_socket_stats(socket) do
+          {:ok, stats} ->
+            Logger.debug("[Jackalope] inet stats #{inspect(stats)} for socket #{inspect(socket)}")
+            {received, sent} = new_stats(stats, state.socket_stats, socket)
+            Logger.debug("[Jackalope] Received #{received} bytes and sent #{sent} bytes")
+
+            :telemetry.execute([:jackalope, :transmission], %{
+              received: received,
+              sent: sent,
+              sent_and_received: received + sent
+            })
+
+            %State{state | socket_stats: %{socket: socket, last_stats: stats}}
+
+          other ->
+            Logger.warn("[Jackalope] Failed to get socket stats: #{inspect(other)}")
+            state
+        end
+
+      other ->
+        Logger.warn("[Jackalope] Failed to capture telemetry on socket: #{inspect(other)}")
+        state
+    end
+  end
+
+  defp ssl_socket_stats({:sslsocket, _, _} = socket), do: :ssl.getstat(socket)
+
+  defp ssl_socket_stats(socket) do
+    Logger.warn("[Jackalope] Not an SSL socket #{inspect(socket)}")
+    {:error, :not_ssl_socket}
+  end
+
+  defp new_stats(stats, socket_stats, socket) do
+    if socket == socket_stats.socket do
+      {stats[:recv_oct] - Keyword.get(socket_stats.last_stats, :recv_oct, 0),
+       stats[:send_oct] - Keyword.get(socket_stats.last_stats, :send_oct, 0)}
+    else
+      {stats[:recv_oct], stats[:send_oct]}
+    end
   end
 
   defp do_publish(%State{client_id: client_id} = state, topic, payload, opts) do

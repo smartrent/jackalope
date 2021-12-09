@@ -52,6 +52,22 @@ service and time to live.
 
 <!-- MDOC !-->
 
+## Metrics
+
+Jackalope produces telemetry about how many bytes are sent to and received from the MQTT server.
+
+You can choose to register any or all of the following metrics in the Application.start/2 of your telemetry-enabled application:
+
+```elixir
+      Telemetry.Metrics.sum("jackalope.transmission.sent_and_received")
+
+      Telemetry.Metrics.sum("jackalope.transmission.sent")
+      
+      Telemetry.Metrics.sum("jackalope.transmission.received")
+```
+
+<!-- MDOC !-->
+
 ## Installation
 
 If [available in Hex](https://hex.pm/docs/publish), the package can be
