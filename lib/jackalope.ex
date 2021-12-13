@@ -60,7 +60,7 @@ defmodule Jackalope do
 
     [
       verify: :verify_peer,
-      host: mqtt_host(), # must return the full name, *without wild cards*, for e.g. "b4mnjg3u7t5uy9-ats.iot.us-east-1.amazonaws.com"
+      host: mqtt_host(), # must return the full name, *without wild cards*, for e.g. "abcdefghijklmo-ats.iot.us-east-1.amazonaws.com"
       port: mqtt_port(), # must return the correct port, e.g. 443
       alpn_advertised_protocols: ["x-amzn-mqtt-ca"],
       server_name_indication: to_charlist(mqtt_host()),
