@@ -18,6 +18,7 @@ defmodule Jackalope.Session do
   alias Jackalope.TortoiseClient
 
   @publish_options [:qos, :retain]
+  @subscribe_options [:qos]
   @work_list_options [:ttl]
 
   defstruct connection_status: :offline,
@@ -40,36 +41,33 @@ defmodule Jackalope.Session do
 
   ## MQTT-ing
   @doc false
-  def subscribe(subscription, opts \\ [])
-
-  def subscribe({topic_filter, subscribe_opts}, opts) do
-    cmd = {:subscribe, topic_filter, subscribe_opts}
+  def subscribe(topic_filter, opts) when is_binary(topic_filter) do
+    subscribe_options = Keyword.take(opts, @subscribe_options)
+    cmd = {:subscribe, topic_filter, subscribe_options}
 
     cond do
-      Keyword.get(subscribe_opts, :qos, 0) not in [0, 1] ->
-        {:error, :unsupported_qos}
+      Keyword.get(subscribe_options, :qos, 0) not in 0..2 ->
+        {:error, :invalid_qos}
 
       _opts_looks_good! = true ->
-        GenServer.cast(__MODULE__, {:cmd, cmd, opts})
+        work_list_options = Keyword.take(opts, @work_list_options)
+        GenServer.cast(__MODULE__, {:cmd, cmd, work_list_options})
     end
   end
 
-  def subscribe(topic_filter, opts) do
-    # lift the input to the correct format
-    subscribe({topic_filter, []}, opts)
-  end
-
   @doc false
-  def unsubscribe(unsubscribe, opts \\ [])
-
-  def unsubscribe({topic_filter, unsubscribe_opts}, opts) do
-    cmd = {:unsubscribe, topic_filter, unsubscribe_opts}
-    GenServer.cast(__MODULE__, {:cmd, cmd, opts})
-  end
-
   def unsubscribe(topic_filter, opts) do
-    # lift the input to the correct format
-    unsubscribe({topic_filter, []}, opts)
+    unsubscribe_options = Keyword.take(opts, @subscribe_options)
+    cmd = {:unsubscribe, topic_filter, unsubscribe_options}
+
+    cond do
+      Keyword.get(unsubscribe_options, :qos, 0) not in 0..2 ->
+        {:error, :invalid_qos}
+
+      _opts_looks_good! = true ->
+        work_list_options = Keyword.take(opts, @work_list_options)
+        GenServer.cast(__MODULE__, {:cmd, cmd, work_list_options})
+    end
   end
 
   @doc false

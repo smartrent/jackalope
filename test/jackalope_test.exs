@@ -82,14 +82,14 @@ defmodule JackalopeTest do
   describe "subscribe/2" do
     test "subscribe to a topic filter with QoS=0", context do
       _ = connect(context)
-      assert :ok = Jackalope.subscribe({"foo/bar", qos: 0})
+      assert :ok = Jackalope.subscribe("foo/bar", qos: 0)
       {:ok, subscribe} = expect_subscribe(context, [{"foo/bar", 0}])
       :ok = acknowledge_subscribe(context, subscribe, [{:ok, 0}])
     end
 
     test "subscribe to a topic filter with QoS=1", context do
       _ = connect(context)
-      assert :ok = Jackalope.subscribe({"foo/bar", qos: 1})
+      assert :ok = Jackalope.subscribe("foo/bar", qos: 1)
       {:ok, subscribe} = expect_subscribe(context, [{"foo/bar", 1}])
       :ok = acknowledge_subscribe(context, subscribe, [{:ok, 1}])
     end
