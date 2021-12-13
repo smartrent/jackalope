@@ -221,6 +221,9 @@ defmodule Jackalope do
   This will not dispatch the subscribe request Jackalope cannot get it
   to the broker within the specified duration (in ms).
   """
+  @spec subscribe(topic | [topic], [option]) :: :ok | {:error, :unsupported_qos}
+        when topic: Tortoise311.topic_filter() | {Tortoise311.topic_filter(), Tortoise311.qos()},
+             option: {:ttl, pos_integer()}
   defdelegate subscribe(topic_filter, opts \\ []), to: Jackalope.Session
 
   @doc """
@@ -239,6 +242,8 @@ defmodule Jackalope do
   Like all the other messages, this will drop the message if it stays
   too long in the queue.
   """
+  @spec unsubscribe(topic | [topic], [option]) :: :ok
+        when topic: Tortoise311.topic_filter(), option: {:ttl, pos_integer()}
   defdelegate unsubscribe(topic_filter, opts \\ []), to: Jackalope.Session
 
   # TODO Get rid of this stuff
