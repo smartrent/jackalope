@@ -212,6 +212,11 @@ defmodule Jackalope do
   This will not dispatch the subscribe request Jackalope cannot get it
   to the broker within the specified duration (in ms).
   """
+  @spec subscribe(String.t(), options) ::
+          :ok | {:error, :invalid_qos}
+        when options: [
+               {:qos, 0..2} | {:ttl, non_neg_integer | :infinity}
+             ]
   defdelegate subscribe(topic_filter, opts \\ []), to: Jackalope.Session
 
   @doc """
@@ -230,6 +235,10 @@ defmodule Jackalope do
   Like all the other messages, this will drop the message if it stays
   too long in the queue.
   """
+  @spec unsubscribe(String.t(), options) :: :ok
+        when options: [
+               {:qos, 0..2} | {:ttl, non_neg_integer | :infinity}
+             ]
   defdelegate unsubscribe(topic_filter, opts \\ []), to: Jackalope.Session
 
   # TODO Get rid of this stuff
