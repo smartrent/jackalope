@@ -5,6 +5,8 @@ defmodule JackalopeTest do
   alias JackalopeTest.ScriptedMqttServer, as: MqttServer
   alias Tortoise311.Package
 
+  @data_dir "/tmp/jackalope_test"
+
   setup context do
     # Give time to the mock mqttServer's supervisor to shut down after each test.
     Process.sleep(200)
@@ -70,7 +72,8 @@ defmodule JackalopeTest do
                Jackalope.start_link(
                  server: transport,
                  client_id: context.client_id,
-                 handler: JackalopeTest.TestHandler
+                 handler: JackalopeTest.TestHandler,
+                 data_dir: @data_dir
                )
 
       assert_receive {MqttServer, {:received, %Package.Connect{}}}, 1_000
@@ -186,7 +189,8 @@ defmodule JackalopeTest do
         client_id: client_id,
         handler: handler,
         initial_topics: initial_topics,
-        max_work_list_size: max_work_list_size
+        max_work_list_size: max_work_list_size,
+        data_dir: @data_dir
       )
 
     pid =

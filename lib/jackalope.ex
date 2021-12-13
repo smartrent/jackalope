@@ -13,7 +13,7 @@ defmodule Jackalope do
     host: "localhost", port: 1883
   }
 
-  @data_dir Application.compile_env!(:jackalope, :data_dir)
+  @default_data_dir "/data/jackalope"
 
   @doc """
   Start a Jackalope session
@@ -100,6 +100,9 @@ defmodule Jackalope do
   - `backoff` (default: [min_interval: 1_000, max_interval: 30_000])
      gives the bounds of an exponential backoff algorithm used when retrying
      from failed connections.
+
+  - `data_dir` (default: #{inspect(@default_data_dir)}) specifies where to
+    persist messages until they make it to the broker
   """
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts) do
@@ -112,6 +115,7 @@ defmodule Jackalope do
     initial_topics = Keyword.get(opts, :initial_topics)
     jackalope_handler = Keyword.get(opts, :handler, Jackalope.Handler.Logger)
     list_max = Keyword.get(opts, :max_work_list_size, :infinity)
+    data_dir = Keyword.get(opts, :data_dir, @default_data_dir)
 
     children = [
       # The queue contains the work list
@@ -120,7 +124,7 @@ defmodule Jackalope do
          queue_name: :saved_worklist,
          db_name: :saved_worklist_db,
          max_work_list_size: list_max,
-         data_dir: @data_dir
+         data_dir: data_dir
        ]},
       {Jackalope.Session, [initial_topics: initial_topics, handler: jackalope_handler]},
       {Jackalope.Supervisor,
