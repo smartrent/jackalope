@@ -22,16 +22,13 @@ defmodule Jackalope.WorkList do
   @doc "Pushes a work item onto the CubQ stack"
   @spec push(any) :: :ok
   def push(item) do
-    Logger.debug("[Jackalope] WorkList - Pushed #{inspect(item)}")
     GenServer.call(__MODULE__, {:push, item})
   end
 
   @doc "Pops the most recently added work item off the CubQ stack"
   @spec pop :: nil | tuple()
   def pop() do
-    item = GenServer.call(__MODULE__, :pop)
-    Logger.debug("[Jackalope] WorkList - Popped #{inspect(item)}")
-    item
+    GenServer.call(__MODULE__, :pop)
   end
 
   @doc false
