@@ -219,17 +219,18 @@ defmodule Jackalope.Session do
     # Setup the options for the work order; so far we support time to
     # live, which allow us to specify the time a work order is allowed
     # to stay in the work list before it is deemed irrelevant
-    opts =
-      Keyword.update(opts, :ttl, :infinity, fn
+    expiration =
+      case Keyword.get(opts, :ttl, :infinity) do
         :infinity -> :infinity
         ttl when is_integer(ttl) -> System.monotonic_time(:millisecond) + ttl
-      end)
+      end
 
     # Note that we don't really concern ourselves with the order of
     # the commands; the work_list is a list (and thus a stack) and when
     # we retry a message it will reenter the work list at the front,
     # and it could already have messages, etc.
-    work_list = [{cmd, opts} | work_list]
+    work_list_opts = [expiration: expiration]
+    work_list = [{cmd, work_list_opts} | work_list]
     state = %State{state | work_list: bound(work_list, state.max_work_list_size)}
     {:noreply, state, {:continue, :consume_work_list}}
   end
@@ -281,9 +282,9 @@ defmodule Jackalope.Session do
         } = state
       ) do
     state = %State{state | work_list: remaining}
-    ttl = Keyword.get(opts, :ttl, :infinity)
+    expiration = Keyword.get(opts, :expiration, :infinity)
 
-    if ttl > System.monotonic_time(:millisecond) do
+    if expiration > System.monotonic_time(:millisecond) do
       case execute_work(cmd) do
         :ok ->
           # fire and forget work; Publish with QoS=0 is among the work
@@ -343,9 +344,9 @@ defmodule Jackalope.Session do
         work_list,
         {[], 0},
         fn {_cmd, opts} = work_order, {active_list, deleted_count} ->
-          ttl = Keyword.get(opts, :ttl, :infinity)
+          expiration = Keyword.fetch!(opts, :expiration)
 
-          if ttl > now,
+          if expiration > now,
             do: {[work_order | active_list], deleted_count},
             else: {active_list, deleted_count + 1}
         end
