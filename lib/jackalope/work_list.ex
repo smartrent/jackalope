@@ -91,22 +91,10 @@ defmodule Jackalope.WorkList do
   def handle_call({:push, item}, _from, state) do
     max = state.max_work_list_size
 
-    _ =
-      if size(state) >= max do
-        _ = remove_expired(state)
-        excess = size(state) - max
+    remove_expired(state)
+    excess = size(state) + 1 - max
 
-        if excess >= 0 do
-          # Make room for the new item if at max or more
-          for _i <- 1..(excess + 1) do
-            {:ok, item_removed} = CubQ.dequeue(state.queue)
-
-            Logger.info(
-              "[Jackalope] WorkList - The worklist still exceeds #{max}. #{inspect(item_removed)} was removed from the queue."
-            )
-          end
-        end
-      end
+    remove_excess(state, excess)
 
     expiration = expiration(item)
     {:reply, CubQ.push(state.queue, {item, expiration}), state}
@@ -123,22 +111,25 @@ defmodule Jackalope.WorkList do
   end
 
   defp remove_expired(state) do
-    Logger.debug("[Jackalope] WorkList - Removing expired work orders")
+    case CubQ.peek_first(state.queue) do
+      {:ok, item_with_expiration} ->
+        if keep?(item_with_expiration) do
+          :ok
+        else
+          {:ok, _} = CubQ.dequeue(state.queue)
+          remove_expired(state)
+        end
 
-    for _i <- 1..size(state) do
-      # remove from begining
-      {:ok, item_with_expiration} = CubQ.dequeue(state.queue)
-
-      if keep?(item_with_expiration) do
-        Logger.debug("[Jackalope] WorkList - Keeping #{inspect(item_with_expiration)}")
-        # same as push (insert at end)
-        :ok = CubQ.enqueue(state.queue, item_with_expiration)
-      else
-        Logger.debug(
-          "[Jackalope] #{inspect(item_with_expiration)} removed from the queue due to expiration. Size is #{size(state)}"
-        )
-      end
+      _ ->
+        :ok
     end
+  end
+
+  defp remove_excess(_state, excess) when excess <= 0, do: :ok
+
+  defp remove_excess(state, excess) do
+    {:ok, _} = CubQ.dequeue(state.queue)
+    remove_excess(state, excess - 1)
   end
 
   defp size(state), do: CubDB.size(state.db)
