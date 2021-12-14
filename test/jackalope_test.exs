@@ -54,7 +54,7 @@ defmodule JackalopeTest do
           payload: expected_payload = %{"msg" => "hello"}
         )
 
-      assert :ok = Jackalope.publish({"foo", qos: 0}, %{"msg" => "hello"})
+      assert :ok = Jackalope.publish("foo", %{"msg" => "hello"}, qos: 0)
       # this is what the server received
       assert %Package.Publish{topic: "foo", qos: 0, payload: payload} = flush.()
       assert expected_payload == Jason.decode!(payload)
@@ -71,15 +71,11 @@ defmodule JackalopeTest do
           payload: expected_payload = %{"msg" => "hello"}
         )
 
-      assert :ok = Jackalope.publish({"foo", qos: 1}, %{"msg" => "hello"})
+      assert :ok = Jackalope.publish("foo", %{"msg" => "hello"}, qos: 1)
       # this is what the server received
       assert received_publish = flush.()
       assert %Package.Publish{topic: "foo", qos: 1} = received_publish
       assert expected_payload == Jason.decode!(received_publish.payload)
-    end
-
-    test "publish with QoS=2 should not be allowed", _context do
-      assert {:error, :unsupported_qos} = Jackalope.publish({"foo/bar", qos: 2}, nil)
     end
   end
 
@@ -113,7 +109,7 @@ defmodule JackalopeTest do
       _ = connect(context, max_work_list_size: 10)
 
       for i <- 1..15 do
-        assert :ok = Jackalope.publish({"foo", qos: 1}, %{"msg" => "hello #{i}"})
+        assert :ok = Jackalope.publish("foo", %{"msg" => "hello #{i}"}, qos: 1)
       end
 
       work_list = Jackalope.Session.status() |> Map.fetch!(:work_list)

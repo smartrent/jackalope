@@ -17,6 +17,9 @@ defmodule Jackalope.Session do
   alias __MODULE__, as: State
   alias Jackalope.TortoiseClient
 
+  @publish_options [:qos, :retain]
+  @work_list_options [:ttl]
+
   defstruct connection_status: :offline,
             handler: nil,
             work_list: [],
@@ -70,32 +73,17 @@ defmodule Jackalope.Session do
   end
 
   @doc false
-  def publish(topic_and_opts, payload, opts \\ [])
-
-  def publish({topic_levels, publish_opts}, payload, opts) when is_list(topic_levels) do
-    # normalize the topic list, should be a string
-    topic = Enum.join(topic_levels, "/")
-    publish({topic, publish_opts}, payload, opts)
-  end
-
-  def publish(topic, payload, opts) when not is_tuple(topic) do
-    # normalize the topic to include the publish opts
-    publish({topic, []}, payload, opts)
-  end
-
-  def publish({topic, publish_opts}, payload, opts) do
+  def publish(topic, payload, opts) when is_binary(topic) do
+    publish_opts = Keyword.take(opts, @publish_options)
     cmd = {:publish, topic, payload, publish_opts}
 
-    # Ensure the opts passed to the publish are allowed by AWS IoT
     cond do
-      Keyword.get(publish_opts, :qos, 0) not in [0, 1] ->
-        {:error, :unsupported_qos}
-
-      Keyword.get(publish_opts, :retain, false) == true ->
-        {:error, :retain_not_supported}
+      Keyword.get(publish_opts, :qos, 0) not in 0..2 ->
+        {:error, :invalid_qos}
 
       _opts_looks_good! = true ->
-        GenServer.cast(__MODULE__, {:cmd, cmd, opts})
+        work_list_options = Keyword.take(opts, @work_list_options)
+        GenServer.cast(__MODULE__, {:cmd, cmd, work_list_options})
     end
   end
 
