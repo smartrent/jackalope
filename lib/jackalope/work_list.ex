@@ -6,7 +6,7 @@ defmodule Jackalope.WorkList do
   require Logger
 
   @doc "Starts the CubQ process"
-  @spec start_link(list()) :: :ignore | {:error, any} | {:ok, pid}
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -35,11 +35,13 @@ defmodule Jackalope.WorkList do
   end
 
   @doc false
+  @spec size() :: non_neg_integer()
   def size() do
     GenServer.call(__MODULE__, :size)
   end
 
   @doc false
+  @spec remove_all() :: :ok
   def remove_all() do
     GenServer.cast(__MODULE__, :remove_all)
   end
