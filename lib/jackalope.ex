@@ -160,22 +160,14 @@ defmodule Jackalope do
   specify on the publish.
 
   ```elixir
-  Jackalope.publish("doors/front_door", %{action: "unlock"}, ttl: 5_000)
+  Jackalope.publish("doors/front_door", %{action: "unlock"}, qos: 1, ttl: 5_000)
   ```
 
-  Currently `ttl` is the only queue option available; to set MQTT
-  Publish options, such as the quality of service, can be done like
-  this:
-
-  ```elixir
-  Jackalope.publish({"room/salon/temp", qos: 1}, %{temp: 21})
-  ```
-
-  The available package options are:
+  The available publish options are:
 
     - `qos` (default `1`) sets the quality of service of the message
       delivery; Notice that only quality of service 0 an 1 are
-      supported by AWS IoT; specifying 2 will result in an error.
+      supported by AWS IoT.
 
     - `retain` (default `false`) sets whether the broker should retain the message.
       Note that AWS IoT does not support this feature.
@@ -186,6 +178,11 @@ defmodule Jackalope do
   Notice that Jackalope will JSON encode the `payload`; so the data
   should be JSON encodable.
   """
+  @spec publish(String.t(), any, options) ::
+          :ok | {:error, :invalid_qos}
+        when options: [
+               {:qos, 0..2} | {:retain, boolean} | {:ttl, non_neg_integer | :infinity}
+             ]
   defdelegate publish(topic, payload, opts \\ []), to: Jackalope.Session
 
   @doc """
