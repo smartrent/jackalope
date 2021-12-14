@@ -20,6 +20,8 @@ defmodule Jackalope.Session do
   @publish_options [:qos, :retain]
   @subscribe_options [:qos]
   @work_list_options [:ttl]
+  # One hour
+  @default_ttl_msecs 3_600_000
 
   defstruct connection_status: :offline,
             handler: nil,
@@ -43,14 +45,18 @@ defmodule Jackalope.Session do
   @doc false
   def subscribe(topic_filter, opts) when is_binary(topic_filter) do
     subscribe_options = Keyword.take(opts, @subscribe_options)
+    work_list_options = Keyword.take(opts, @work_list_options)
+    ttl = Keyword.get(work_list_options, :ttl, @default_ttl_msecs)
     cmd = {:subscribe, topic_filter, subscribe_options}
 
     cond do
       Keyword.get(subscribe_options, :qos, 0) not in 0..2 ->
         {:error, :invalid_qos}
 
+      not (is_integer(ttl) and ttl > 0) ->
+        {:error, :invalid_ttl}
+
       _opts_looks_good! = true ->
-        work_list_options = Keyword.take(opts, @work_list_options)
         GenServer.cast(__MODULE__, {:cmd, cmd, work_list_options})
     end
   end
@@ -58,14 +64,18 @@ defmodule Jackalope.Session do
   @doc false
   def unsubscribe(topic_filter, opts) do
     unsubscribe_options = Keyword.take(opts, @subscribe_options)
+    work_list_options = Keyword.take(opts, @work_list_options)
+    ttl = Keyword.get(work_list_options, :ttl, @default_ttl_msecs)
     cmd = {:unsubscribe, topic_filter, unsubscribe_options}
 
     cond do
       Keyword.get(unsubscribe_options, :qos, 0) not in 0..2 ->
         {:error, :invalid_qos}
 
+      not (is_integer(ttl) and ttl > 0) ->
+        {:error, :invalid_ttl}
+
       _opts_looks_good! = true ->
-        work_list_options = Keyword.take(opts, @work_list_options)
         GenServer.cast(__MODULE__, {:cmd, cmd, work_list_options})
     end
   end
@@ -73,14 +83,18 @@ defmodule Jackalope.Session do
   @doc false
   def publish(topic, payload, opts) when is_binary(topic) do
     publish_opts = Keyword.take(opts, @publish_options)
+    work_list_options = Keyword.take(opts, @work_list_options)
+    ttl = Keyword.get(work_list_options, :ttl, @default_ttl_msecs)
     cmd = {:publish, topic, payload, publish_opts}
 
     cond do
       Keyword.get(publish_opts, :qos, 0) not in 0..2 ->
         {:error, :invalid_qos}
 
+      not (is_integer(ttl) and ttl > 0) ->
+        {:error, :invalid_ttl}
+
       _opts_looks_good! = true ->
-        work_list_options = Keyword.take(opts, @work_list_options)
         GenServer.cast(__MODULE__, {:cmd, cmd, work_list_options})
     end
   end
@@ -101,11 +115,12 @@ defmodule Jackalope.Session do
     handler = Keyword.fetch!(opts, :handler)
     # Produce subscription commands for the initial subscriptions
     initial_topics = Keyword.get(opts, :initial_topics)
-    max_work_list_size = Keyword.get(opts, :max_work_list_size, :infinity)
+    max_work_list_size = Keyword.fetch!(opts, :max_work_list_size)
+    default_expiration = expiration(@default_ttl_msecs)
 
     work_list =
       for topic_filter <- List.wrap(initial_topics),
-          do: {{:subscribe, topic_filter, []}, []}
+          do: {{:subscribe, topic_filter, []}, [expiration: default_expiration]}
 
     initial_state = %State{
       max_work_list_size: max_work_list_size,
@@ -130,6 +145,8 @@ defmodule Jackalope.Session do
 
   def handle_info({:connection_status, status}, state)
       when status in [:down, :terminating, :terminated] do
+    default_expiration = expiration(@default_ttl_msecs)
+
     state = %State{
       state
       | connection_status: :offline,
@@ -149,7 +166,7 @@ defmodule Jackalope.Session do
           Enum.concat([
             for(
               {topic_filter, opts} <- state.subscriptions,
-              do: {{:subscribe, topic_filter, opts}, []}
+              do: {{:subscribe, topic_filter, opts}, [expiration: default_expiration]}
             ),
             state.work_list
           ])
@@ -217,11 +234,9 @@ defmodule Jackalope.Session do
     # Setup the options for the work order; so far we support time to
     # live, which allow us to specify the time a work order is allowed
     # to stay in the work list before it is deemed irrelevant
-    expiration =
-      case Keyword.get(opts, :ttl, :infinity) do
-        :infinity -> :infinity
-        ttl when is_integer(ttl) -> System.monotonic_time(:millisecond) + ttl
-      end
+    ttl = Keyword.get(opts, :ttl, @default_ttl_msecs)
+
+    expiration = expiration(ttl)
 
     # Note that we don't really concern ourselves with the order of
     # the commands; the work_list is a list (and thus a stack) and when
@@ -280,9 +295,9 @@ defmodule Jackalope.Session do
         } = state
       ) do
     state = %State{state | work_list: remaining}
-    expiration = Keyword.get(opts, :expiration, :infinity)
+    expiration = Keyword.fetch!(opts, :expiration)
 
-    if expiration > System.monotonic_time(:millisecond) do
+    if expiration > expiration(0) do
       case execute_work(cmd) do
         :ok ->
           # fire and forget work; Publish with QoS=0 is among the work
@@ -335,7 +350,7 @@ defmodule Jackalope.Session do
   end
 
   defp gc(work_list) do
-    now = System.monotonic_time(:millisecond)
+    now = expiration(0)
 
     {list, count} =
       Enum.reduce(
@@ -368,4 +383,6 @@ defmodule Jackalope.Session do
     # the future, keeping it to make future upgrades easier
     TortoiseClient.unsubscribe(topic_filter, opts)
   end
+
+  defp expiration(ttl), do: System.monotonic_time(:millisecond) + ttl
 end

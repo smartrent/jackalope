@@ -139,7 +139,7 @@ defmodule JackalopeTest do
 
     handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
     initial_topics = Keyword.get(opts, :initial_topics)
-    max_work_list_size = Keyword.get(opts, :max_work_list_size, :infinity)
+    max_work_list_size = Keyword.get(opts, :max_work_list_size, 100)
     # Timing issue hack: Make sure the Session is fully terminated before we reconnect
     # and have the Jackelope supervisor initiated another of the same name
     kill_session()
