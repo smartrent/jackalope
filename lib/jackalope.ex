@@ -14,6 +14,7 @@ defmodule Jackalope do
   }
 
   @default_data_dir "/data/jackalope"
+  @default_max_work_list_size 1000
 
   @doc """
   Start a Jackalope session
@@ -73,10 +74,11 @@ defmodule Jackalope do
       customize_hostname_check: [match_fun: :public_key.pkix_verify_hostname_match_fun(:https)]
     ]
 
-  - `max_work_list_size` (default: :infinity) specifies the maximum
-    number of unexpired work orders Jackalope will retain in its work list
-    (the commands yet to be sent to the MQTT server). When the maximum is
-    reached, the oldest work order is dropped before adding a new work order.
+  - `max_work_list_size` (default: #{inspect(@default_max_work_list_size)})
+    specifies the maximum number of unexpired work orders Jackalope will retain
+    in its work list (the commands yet to be sent to the MQTT server). When the
+    maximum is reached, the oldest work order is dropped before adding a new
+    work order.
 
   - `last_will` (default: nil) specifies the last will message that
     should get published on the MQTT broker if the connection is
@@ -114,7 +116,7 @@ defmodule Jackalope do
     client_id = Keyword.get(opts, :client_id, "jackalope")
     initial_topics = Keyword.get(opts, :initial_topics)
     jackalope_handler = Keyword.get(opts, :handler, Jackalope.Handler.Logger)
-    list_max = Keyword.get(opts, :max_work_list_size, :infinity)
+    list_max = Keyword.get(opts, :max_work_list_size, @default_max_work_list_size)
     data_dir = Keyword.get(opts, :data_dir, @default_data_dir)
 
     children = [

@@ -179,7 +179,7 @@ defmodule JackalopeTest do
 
     handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
     initial_topics = Keyword.get(opts, :initial_topics)
-    max_work_list_size = Keyword.get(opts, :max_work_list_size, :infinity)
+    max_work_list_size = Keyword.get(opts, :max_work_list_size, 10)
     Jackalope.WorkList.stop()
     kill_session()
 
