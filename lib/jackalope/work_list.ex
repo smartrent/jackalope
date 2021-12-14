@@ -106,7 +106,7 @@ defmodule Jackalope.WorkList do
 
   @impl GenServer
   def handle_cast(:remove_all, state) do
-    _ = CubQ.delete_all(state.queue)
+    :ok = CubQ.delete_all(state.queue)
     {:noreply, state}
   end
 
