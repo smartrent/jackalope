@@ -48,10 +48,10 @@ defmodule Jackalope.WorkList do
 
   @impl GenServer
   def init(opts) do
-    data_dir = Keyword.get(opts, :data_dir)
-    db_name = Keyword.get(opts, :db_name)
-    queue_name = Keyword.get(opts, :queue_name)
-    list_max = Keyword.get(opts, :max_work_list_size)
+    data_dir = Keyword.fetch!(opts, :data_dir)
+    db_name = Keyword.fetch!(opts, :db_name)
+    queue_name = Keyword.fetch!(opts, :queue_name)
+    list_max = Keyword.fetch!(opts, :max_work_list_size)
 
     db =
       case CubDB.start_link(data_dir: data_dir, name: db_name, auto_compact: true) do
