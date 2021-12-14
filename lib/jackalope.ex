@@ -173,12 +173,15 @@ defmodule Jackalope do
 
   The available package options are:
 
-    - `qos` (default `1`) set the quality of service of the message
+    - `qos` (default `1`) sets the quality of service of the message
       delivery; Notice that only quality of service 0 an 1 are
       supported by AWS IoT; specifying 2 will result in an error.
 
-    - `retain` has to be false, as AWS IoT does not support retained
-      publish messages
+    - `retain` (default `false`) sets whether the broker should retain the message.
+      Note that AWS IoT does not support this feature.
+
+    - `ttl` (default `:infinity`) sets how long publishing the message will be
+      retried until it has expired.
 
   Notice that Jackalope will JSON encode the `payload`; so the data
   should be JSON encodable.
