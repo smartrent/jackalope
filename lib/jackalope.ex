@@ -13,6 +13,8 @@ defmodule Jackalope do
     host: "localhost", port: 1883
   }
 
+  @default_max_work_list_size 100
+
   @doc """
   Start a Jackalope session
 
@@ -71,7 +73,7 @@ defmodule Jackalope do
       customize_hostname_check: [match_fun: :public_key.pkix_verify_hostname_match_fun(:https)]
     ]
 
-  - `max_work_list_size` (default: :infinity) specifies the maximum
+  - `max_work_list_size` (default: #{@default_max_work_list_size}) specifies the maximum
     number of unexpired work orders Jackalope will retain in its work list
     (the commands yet to be sent to the MQTT server). When the maximum is
     reached, the oldest work order is dropped before adding a new work order.
@@ -109,7 +111,7 @@ defmodule Jackalope do
     client_id = Keyword.get(opts, :client_id, "jackalope")
     initial_topics = Keyword.get(opts, :initial_topics)
     jackalope_handler = Keyword.get(opts, :handler, Jackalope.Handler.Logger)
-    max_work_list_size = Keyword.get(opts, :max_work_list_size, :infinity)
+    max_work_list_size = Keyword.get(opts, :max_work_list_size, @default_max_work_list_size)
 
     children = [
       {Jackalope.Session,
@@ -172,7 +174,7 @@ defmodule Jackalope do
     - `retain` (default `false`) sets whether the broker should retain the message.
       Note that AWS IoT does not support this feature.
 
-    - `ttl` (default `:infinity`) sets how long publishing the message will be
+    - `ttl` (default `3_600_000`) sets how long (in msecs) publishing the message will be
       retried until it has expired.
 
   Notice that Jackalope will JSON encode the `payload`; so the data
@@ -181,7 +183,7 @@ defmodule Jackalope do
   @spec publish(String.t(), any, options) ::
           :ok | {:error, :invalid_qos}
         when options: [
-               {:qos, 0..2} | {:retain, boolean} | {:ttl, non_neg_integer | :infinity}
+               {:qos, 0..2} | {:retain, boolean} | {:ttl, non_neg_integer}
              ]
   defdelegate publish(topic, payload, opts \\ []), to: Jackalope.Session
 
@@ -213,9 +215,9 @@ defmodule Jackalope do
   to the broker within the specified duration (in ms).
   """
   @spec subscribe(String.t(), options) ::
-          :ok | {:error, :invalid_qos}
+          :ok | {:error, :invalid_qos} | {:error, :invalid_ttl}
         when options: [
-               {:qos, 0..2} | {:ttl, non_neg_integer | :infinity}
+               {:qos, 0..2} | {:ttl, non_neg_integer}
              ]
   defdelegate subscribe(topic_filter, opts \\ []), to: Jackalope.Session
 
@@ -235,9 +237,9 @@ defmodule Jackalope do
   Like all the other messages, this will drop the message if it stays
   too long in the queue.
   """
-  @spec unsubscribe(String.t(), options) :: :ok
+  @spec unsubscribe(String.t(), options) :: :ok | {:error, :invalid_qos} | {:error, :invalid_ttl}
         when options: [
-               {:qos, 0..2} | {:ttl, non_neg_integer | :infinity}
+               {:qos, 0..2} | {:ttl, non_neg_integer}
              ]
   defdelegate unsubscribe(topic_filter, opts \\ []), to: Jackalope.Session
 
