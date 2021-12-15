@@ -5,6 +5,7 @@ defmodule Jackalope.WorkList do
   @default_max_size 100
 
   defstruct items: [],
+            pending: %{},
             max_size: @default_max_size
 
   @type t() :: %__MODULE__{items: list(), max_size: non_neg_integer()}
@@ -40,6 +41,31 @@ defmodule Jackalope.WorkList do
   @spec pop(t()) :: t()
   def pop(work_list) do
     %__MODULE__{work_list | items: tl(work_list.items)}
+  end
+
+  @spec pending(t(), reference()) :: t()
+  def pending(work_list, ref) do
+    item = hd(work_list.items)
+
+    %__MODULE__{
+      work_list
+      | items: tl(work_list.items),
+        pending: Map.put(work_list.pending, ref, item)
+    }
+  end
+
+  @spec reset_pending(Jackalope.WorkList.t()) :: Jackalope.WorkList.t()
+  def reset_pending(work_list) do
+    pending_items = Map.values(work_list.pending)
+
+    prepend(%__MODULE__{work_list | pending: %{}}, pending_items)
+  end
+
+  @spec done(t(), reference()) :: {t(), any}
+  def done(work_list, ref) do
+    {item, pending} = Map.pop(work_list.pending, ref)
+    # item can be nil
+    {%__MODULE__{work_list | pending: pending}, item}
   end
 
   @spec count(t()) :: non_neg_integer()

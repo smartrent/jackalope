@@ -77,7 +77,7 @@ defmodule JackalopeTest do
     end
   end
 
-  describe "bounded work list" do
+  describe "work list" do
     test "dropping work orders", context do
       _ = connect(context, max_work_list_size: 10)
 
@@ -87,6 +87,38 @@ defmodule JackalopeTest do
 
       work_list = Jackalope.Session.status() |> Map.fetch!(:work_list)
       assert Jackalope.WorkList.count(work_list) == 10
+    end
+
+    test "pending and done work items", context do
+      _ = connect(context, max_work_list_size: 10)
+
+      for i <- 1..5 do
+        assert :ok = Jackalope.publish("foo", %{"msg" => "hello #{i}"}, qos: 1)
+      end
+
+      work_list = Jackalope.Session.status() |> Map.fetch!(:work_list)
+      ref = make_ref()
+
+      work_list = Jackalope.WorkList.pending(work_list, ref)
+      {work_list, _item} = Jackalope.WorkList.done(work_list, ref)
+
+      assert Jackalope.WorkList.count(work_list) == 4
+    end
+
+    test "reset_pending work items", context do
+      _ = connect(context, max_work_list_size: 10)
+
+      for i <- 1..5 do
+        assert :ok = Jackalope.publish("foo", %{"msg" => "hello #{i}"}, qos: 1)
+      end
+
+      work_list = Jackalope.Session.status() |> Map.fetch!(:work_list)
+      ref = make_ref()
+
+      work_list = Jackalope.WorkList.pending(work_list, ref)
+      assert Jackalope.WorkList.count(work_list) == 4
+      work_list = Jackalope.WorkList.reset_pending(work_list)
+      assert Jackalope.WorkList.count(work_list) == 5
     end
   end
 
