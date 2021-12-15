@@ -15,7 +15,7 @@ defmodule Jackalope.Session do
   require Logger
 
   alias __MODULE__, as: State
-  alias Jackalope.TortoiseClient
+  alias Jackalope.{TortoiseClient, WorkList}
 
   @publish_options [:qos, :retain]
   @subscribe_options [:qos]
@@ -25,10 +25,9 @@ defmodule Jackalope.Session do
 
   defstruct connection_status: :offline,
             handler: nil,
-            work_list: [],
+            work_list: nil,
             pending: %{},
-            subscriptions: %{},
-            max_work_list_size: nil
+            subscriptions: %{}
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
@@ -116,14 +115,15 @@ defmodule Jackalope.Session do
     # Produce subscription commands for the initial subscriptions
     initial_topics = Keyword.get(opts, :initial_topics)
     max_work_list_size = Keyword.fetch!(opts, :max_work_list_size)
-    default_expiration = expiration(@default_ttl_msecs)
+    default_expiration = WorkList.expiration(@default_ttl_msecs)
 
-    work_list =
+    initial_items =
       for topic_filter <- List.wrap(initial_topics),
           do: {{:subscribe, topic_filter, []}, [expiration: default_expiration]}
 
+    work_list = WorkList.new(initial_items, max_work_list_size)
+
     initial_state = %State{
-      max_work_list_size: max_work_list_size,
       work_list: work_list,
       handler: handler
     }
@@ -145,7 +145,13 @@ defmodule Jackalope.Session do
 
   def handle_info({:connection_status, status}, state)
       when status in [:down, :terminating, :terminated] do
-    default_expiration = expiration(@default_ttl_msecs)
+    default_expiration = WorkList.expiration(@default_ttl_msecs)
+
+    subscription_items =
+      for(
+        {topic_filter, opts} <- state.subscriptions,
+        do: {{:subscribe, topic_filter, opts}, [expiration: default_expiration]}
+      )
 
     state = %State{
       state
@@ -162,15 +168,7 @@ defmodule Jackalope.Session do
         # will not resubscribe to a topic we are no longer interested
         # in.
         subscriptions: %{},
-        work_list:
-          Enum.concat([
-            for(
-              {topic_filter, opts} <- state.subscriptions,
-              do: {{:subscribe, topic_filter, opts}, [expiration: default_expiration]}
-            ),
-            state.work_list
-          ])
-          |> bound(state.max_work_list_size)
+        work_list: WorkList.prepend(state.work_list, subscription_items)
     }
 
     {:noreply, state}
@@ -182,16 +180,16 @@ defmodule Jackalope.Session do
         {:tortoise_result, ref, res},
         %State{pending: pending} = state
       ) do
-    {work_order, pending} = Map.pop(pending, ref)
+    {work_item, pending} = Map.pop(pending, ref)
     state = %State{state | pending: pending}
 
     case res do
-      _unknown_ref when is_nil(work_order) ->
+      _unknown_ref when is_nil(work_item) ->
         Logger.info("Received unknown ref from Tortoise311: #{inspect(ref)}")
         {:noreply, state}
 
       :ok ->
-        case work_order do
+        case work_item do
           {{:subscribe, topic, subscription_opts}, _opts} ->
             # Note that all subscriptions has to go through Jackalope;
             # for that reason we cannot use the "initial
@@ -222,7 +220,7 @@ defmodule Jackalope.Session do
 
         state = %State{
           state
-          | work_list: bound([work_order | state.work_list], state.max_work_list_size)
+          | work_list: WorkList.push(state.work_list, work_item)
         }
 
         {:noreply, state}
@@ -236,20 +234,26 @@ defmodule Jackalope.Session do
     # to stay in the work list before it is deemed irrelevant
     ttl = Keyword.get(opts, :ttl, @default_ttl_msecs)
 
-    expiration = expiration(ttl)
+    expiration = WorkList.expiration(ttl)
 
     # Note that we don't really concern ourselves with the order of
     # the commands; the work_list is a list (and thus a stack) and when
     # we retry a message it will reenter the work list at the front,
     # and it could already have messages, etc.
-    work_list_opts = [expiration: expiration]
-    work_list = [{cmd, work_list_opts} | work_list]
-    state = %State{state | work_list: bound(work_list, state.max_work_list_size)}
+    work_opts = [expiration: expiration]
+    work_item = {cmd, work_opts}
+    state = %State{state | work_list: WorkList.push(work_list, work_item)}
     {:noreply, state, {:continue, :consume_work_list}}
   end
 
   def handle_cast(:reconnect, state) do
     :ok = Jackalope.TortoiseClient.reconnect()
+
+    pending_work_items =
+      for(
+        {ref, work_order} when is_reference(ref) <- state.pending,
+        do: work_order
+      )
 
     state = %State{
       state
@@ -259,15 +263,7 @@ defmodule Jackalope.Session do
         # already an issue with QoS=1 messages; subscribes and
         # unsubscribes should be idempotent
         pending: %{},
-        work_list:
-          Enum.concat([
-            for(
-              {ref, work_order} when is_reference(ref) <- state.pending,
-              do: work_order
-            ),
-            state.work_list
-          ])
-          |> bound(state.max_work_list_size)
+        work_list: WorkList.prepend(state.work_list, pending_work_items)
     }
 
     {:noreply, state}
@@ -279,93 +275,52 @@ defmodule Jackalope.Session do
     {:noreply, state}
   end
 
-  def handle_continue(:consume_work_list, %State{work_list: []} = state) do
-    # base-case; we are done consuming and will idle until more work
-    # is produced
-    {:noreply, state}
-  end
-
   # reductive case, consume work until the work list is empty
   def handle_continue(
         :consume_work_list,
         %State{
           connection_status: :online,
-          work_list: [{cmd, opts} = work_order | remaining],
+          work_list: work_list,
           pending: pending
         } = state
       ) do
-    state = %State{state | work_list: remaining}
-    expiration = Keyword.fetch!(opts, :expiration)
-
-    if expiration > expiration(0) do
-      case execute_work(cmd) do
-        :ok ->
-          # fire and forget work; Publish with QoS=0 is among the work
-          # that doesn't produce references
-          {:noreply, state, {:continue, :consume_work_list}}
-
-        {:ok, ref} ->
-          state = %State{state | pending: Map.put_new(pending, ref, work_order)}
-          {:noreply, state, {:continue, :consume_work_list}}
-
-        {:error, :no_connection} ->
-          {:noreply,
-           %{state | work_list: bound([work_order | remaining], state.max_work_list_size)}}
-      end
+    if WorkList.empty?(work_list) do
+      {:noreply, state}
     else
-      # drop the message, it is outside of the time to live
-      if function_exported?(state.handler, :handle_error, 1) do
-        reason = {:publish_error, cmd, :ttl_expired}
-        apply(state.handler, :handle_error, [reason])
-      end
+      {cmd, opts} = work_item = WorkList.peek(work_list)
+      expiration = Keyword.fetch!(opts, :expiration)
 
-      {:noreply, state, {:continue, :consume_work_list}}
-    end
-  end
+      if expiration > WorkList.expiration(0) do
+        case execute_work(cmd) do
+          :ok ->
+            # fire and forget work; Publish with QoS=0 is among the work
+            # that doesn't produce references
+            {:noreply, %State{state | work_list: WorkList.pop(work_list)},
+             {:continue, :consume_work_list}}
 
-  defp bound(work_list, max_size) do
-    current_size = Enum.count(work_list)
+          {:ok, ref} ->
+            state = %State{
+              state
+              | work_list: WorkList.pop(work_list),
+                pending: Map.put_new(pending, ref, work_item)
+            }
 
-    if current_size <= max_size do
-      work_list
-    else
-      Logger.warn(
-        "[Jackalope] The worklist exceeds #{max_size} (#{current_size}). Looking to shrink it."
-      )
+            {:noreply, state, {:continue, :consume_work_list}}
 
-      {active_wl, deleted_count} = gc(work_list)
-
-      active_size = current_size - deleted_count
-
-      if active_size <= max_size do
-        active_wl
-      else
-        {dropped, cropped_list} = List.pop_at(active_wl, active_size - 1)
-
-        Logger.warn("[Jackalope] Dropped #{inspect(dropped)}  from oversized work list")
-
-        cropped_list
-      end
-    end
-  end
-
-  defp gc(work_list) do
-    now = expiration(0)
-
-    {list, count} =
-      Enum.reduce(
-        work_list,
-        {[], 0},
-        fn {_cmd, opts} = work_order, {active_list, deleted_count} ->
-          expiration = Keyword.fetch!(opts, :expiration)
-
-          if expiration > now,
-            do: {[work_order | active_list], deleted_count},
-            else: {active_list, deleted_count + 1}
+          # TODO - {:error, reason}
+          {:error, :no_connection} ->
+            {:noreply, state}
         end
-      )
+      else
+        # drop the message, it is outside of the time to live
+        if function_exported?(state.handler, :handle_error, 1) do
+          reason = {:publish_error, cmd, :ttl_expired}
+          apply(state.handler, :handle_error, [reason])
+        end
 
-    {Enum.reverse(list), count}
+        {:noreply, state, {:continue, :consume_work_list}}
+      end
+    end
   end
 
   ### PRIVATE HELPERS --------------------------------------------------
@@ -383,6 +338,4 @@ defmodule Jackalope.Session do
     # the future, keeping it to make future upgrades easier
     TortoiseClient.unsubscribe(topic_filter, opts)
   end
-
-  defp expiration(ttl), do: System.monotonic_time(:millisecond) + ttl
 end

@@ -113,7 +113,7 @@ defmodule JackalopeTest do
       end
 
       work_list = Jackalope.Session.status() |> Map.fetch!(:work_list)
-      assert Enum.count(work_list) == 10
+      assert Jackalope.WorkList.count(work_list) == 10
     end
   end
 
