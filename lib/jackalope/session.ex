@@ -24,8 +24,7 @@ defmodule Jackalope.Session do
 
   defstruct connection_status: :offline,
             handler: nil,
-            work_list: nil,
-            pending: %{}
+            work_list: nil
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
@@ -109,10 +108,10 @@ defmodule Jackalope.Session do
   # Handle responses to user initiated publish...
   def handle_info(
         {:tortoise_result, ref, res},
-        %State{pending: pending} = state
+        %State{work_list: work_list} = state
       ) do
-    {work_item, pending} = Map.pop(pending, ref)
-    state = %State{state | pending: pending}
+    {updated_work_list, work_item} = WorkList.done(work_list, ref)
+    state = %State{state | work_list: updated_work_list}
 
     case res do
       _unknown_ref when is_nil(work_item) ->
@@ -156,20 +155,12 @@ defmodule Jackalope.Session do
   def handle_cast(:reconnect, state) do
     :ok = Jackalope.TortoiseClient.reconnect()
 
-    pending_work_items =
-      for(
-        {ref, work_order} when is_reference(ref) <- state.pending,
-        do: work_order
-      )
-
     state = %State{
       state
       | connection_status: :offline,
         # We will republish all the messages we got in pending; this
         # might result in messages being received twice, but this is
-        # already an issue with QoS=1 messages.
-        pending: %{},
-        work_list: WorkList.prepend(state.work_list, pending_work_items)
+        work_list: WorkList.reset_pending(state.work_list)
     }
 
     {:noreply, state}
@@ -186,14 +177,13 @@ defmodule Jackalope.Session do
         :consume_work_list,
         %State{
           connection_status: :online,
-          work_list: work_list,
-          pending: pending
+          work_list: work_list
         } = state
       ) do
     if WorkList.empty?(work_list) do
       {:noreply, state}
     else
-      {cmd, opts} = work_item = WorkList.peek(work_list)
+      {cmd, opts} = WorkList.peek(work_list)
       expiration = Keyword.fetch!(opts, :expiration)
 
       if expiration > WorkList.expiration(0) do
@@ -207,14 +197,13 @@ defmodule Jackalope.Session do
           {:ok, ref} ->
             state = %State{
               state
-              | work_list: WorkList.pop(work_list),
-                pending: Map.put_new(pending, ref, work_item)
+              | work_list: WorkList.pending(work_list, ref)
             }
 
             {:noreply, state, {:continue, :consume_work_list}}
 
-          # TODO - {:error, reason}
-          {:error, :no_connection} ->
+          {:error, reason} ->
+            Logger.warn("[Jackalope] Temporarily failed to execute #{inspect(cmd)}: #{reason}")
             {:noreply, state}
         end
       else
