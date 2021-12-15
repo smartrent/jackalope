@@ -290,27 +290,27 @@ defmodule Jackalope.Session do
         :consume_work_list,
         %State{
           connection_status: :online,
-          work_list: [{cmd, opts} = work_order | remaining],
+          work_list: [{cmd, cmd_opts} = work_order | remaining],
           pending: pending
         } = state
       ) do
-    state = %State{state | work_list: remaining}
-    expiration = Keyword.fetch!(opts, :expiration)
+    expiration = Keyword.fetch!(cmd_opts, :expiration)
 
     if expiration > expiration(0) do
       case execute_work(cmd) do
         :ok ->
           # fire and forget work; Publish with QoS=0 is among the work
           # that doesn't produce references
-          {:noreply, state, {:continue, :consume_work_list}}
+          {:noreply, %State{state | work_list: remaining}, {:continue, :consume_work_list}}
 
         {:ok, ref} ->
-          state = %State{state | pending: Map.put_new(pending, ref, work_order)}
-          {:noreply, state, {:continue, :consume_work_list}}
-
-        {:error, :no_connection} ->
           {:noreply,
-           %{state | work_list: bound([work_order | remaining], state.max_work_list_size)}}
+           %State{state | work_list: remaining, pending: Map.put_new(pending, ref, work_order)},
+           {:continue, :consume_work_list}}
+
+        {:error, reason} ->
+          Logger.warn("[Jackalope] Failed to execute work item #{cmd}: #{reason}")
+          {:noreply, state}
       end
     else
       # drop the message, it is outside of the time to live
@@ -319,7 +319,7 @@ defmodule Jackalope.Session do
         apply(state.handler, :handle_error, [reason])
       end
 
-      {:noreply, state, {:continue, :consume_work_list}}
+      {:noreply, %State{state | work_list: remaining}, {:continue, :consume_work_list}}
     end
   end
 
