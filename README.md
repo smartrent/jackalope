@@ -16,16 +16,8 @@ Jackalope aims to make an interface that:
   and implementing a concept of ttl (time to live) on the messages
   placed in the mailbox; ensuring the "request to unlock the door"
   won't happen two hours later when the MQTT connection finally
-  reconnects. This allows Jackalope to accept publish and
-  subscription requests while the connection is down.
-
-- Makes it impossible (or at least hard) to do things that AWS IoT
-  does not support; such as publishing a message or subscribing to a
-  topic filter with a greater quality of service than allowed, o
-  publishing a message with the retain flag set.
-
-- Makes it easy to connect to AWS IoT with the correct encryption
-  enabled.
+  reconnects. This allows Jackalope to accept publish requests while
+  the connection is down.
 
 Besides this Jackalope aims to provide helpers for local testing,
 allowing you to test your application without having a connection to
@@ -41,18 +33,12 @@ with the part the application that needs MQTT connectivity.
 `Jackalope.start_link/1` documentation for information on the
 available option values.
 
-Once `Jackalope` is running it is possible to subscribe, unsubscribe,
-and publish messages to the broker; in addition to this there are some
-connection specific functionality is exposed, allowing us to ask for
-the connection status, and request a connection reconnect.
+Once `Jackalope` is running it is possible to publish messages to the broker;
+in addition to this there are some connection specific functionality is exposed,
+allowing us to ask for the connection status, and request a connection reconnect.
 
-- `Jackalope.subscribe(topic)` request a subscription to a specific
-  topic. The topic will be added to the list of topics `Jackalope`
-  will ensure we are subscribed to.
-
-- `Jackalope.unsubscribe(topic)` will request an unsubscribe from a
-  specific topic and remove the topic from the list of topics
-  `Jackalope` ensure are subscribed to.
+Subscriptions are static only and are set as part of the connection options
+provided to Jackalope.
 
 - `Jackalope.publish(topic, payload)` will publish a message to the
   MQTT broker;
@@ -61,8 +47,8 @@ the connection status, and request a connection reconnect.
   reconnect; this is useful if the device changes network connection.
 
 Please see the documentation for each of the functions for more
-information on usage; especially the subscribe and publish functions
-accepts options such as setting quality of service and time to live.
+information on usage; publish functions accept options such as setting quality of
+service and time to live.
 
 <!-- MDOC !-->
 

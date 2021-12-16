@@ -62,19 +62,6 @@ defmodule Jackalope.TortoiseClient do
     publish(topic, payload, timeout: timeout)
   end
 
-  @doc "Subscribe the hub to a topic"
-  @spec subscribe(String.t(), opts :: Keyword.t()) :: {:ok, reference()} | {:error, atom}
-  def subscribe(topic, opts \\ []) do
-    opts = Keyword.put_new(opts, :qos, 1)
-    GenServer.call(__MODULE__, {:subscribe, topic, opts})
-  end
-
-  @doc "Unsubscribe the hub from a topic"
-  @spec unsubscribe(String.t(), opts :: Keyword.t()) :: {:ok, reference()} | {:error, atom}
-  def unsubscribe(topic_filter, opts \\ []) do
-    GenServer.call(__MODULE__, {:unsubscribe, topic_filter, opts})
-  end
-
   @doc "Do we have an MQTT connection?"
   @spec connected?() :: boolean
   def connected?() do
@@ -174,31 +161,6 @@ defmodule Jackalope.TortoiseClient do
   def handle_call(:connected?, _from, %State{connection: pid} = state) do
     tortoise_state = is_pid(pid) and Process.alive?(pid)
     {:reply, tortoise_state, state}
-  end
-
-  def handle_call({:subscribe, topic, _opts}, _from, %State{connection: nil} = state) do
-    Logger.warn("[Jackalope] Can't subscribe to #{inspect(topic)}: No connection")
-    {:reply, {:error, :no_connection}, state}
-  end
-
-  def handle_call({:subscribe, topic, opts}, _from, %State{client_id: client_id} = state) do
-    qos = Keyword.get(opts, :qos, 1)
-    Logger.debug("[Jackalope] Subscribing #{client_id} to #{inspect(topic)}")
-    {:reply, Tortoise311.Connection.subscribe(client_id, {topic, qos}), state}
-  end
-
-  def handle_call({:unsubscribe, topic_filter, _opts}, _from, %State{connection: nil} = state) do
-    Logger.warn("[Jackalope] Can't unsubscribe from #{inspect(topic_filter)}: No connection")
-    {:reply, {:error, :no_connection}, state}
-  end
-
-  def handle_call(
-        {:unsubscribe, topic_filter, _opts},
-        _from,
-        %State{client_id: client_id} = state
-      ) do
-    Logger.info("[Jackalope] Unsubscribing #{client_id} from topic #{inspect(topic_filter)}")
-    {:reply, Tortoise311.Connection.unsubscribe(client_id, topic_filter), state}
   end
 
   def handle_call({:publish, topic, payload, opts}, _from, %State{} = state) do

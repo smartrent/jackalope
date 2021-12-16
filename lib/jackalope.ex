@@ -38,9 +38,10 @@ defmodule Jackalope do
 
   - `initial_topics` (optional) specifies a list of topic_filters
     Jackalope should connect to when a connection has been
-    established. Notice that this list is only used for the initial
-    connect, should a reconnect happen later in the life-cycle, the
-    current subscription state tracked by Jackalope will be used.
+    established. Notice that this list is also used should a reconnect
+    happen later in the life-cycle. Note that Jackalope does not support
+    dynamic subscriptions or unsubscribing. This is the only mechanism
+    for subscribing.
 
   - `handler` (default: `Jackalope.Handler.Logger`) specifies the
     module implementing the callbacks (implementing
@@ -109,14 +110,12 @@ defmodule Jackalope do
   @impl Supervisor
   def init(opts) do
     client_id = Keyword.get(opts, :client_id, "jackalope")
-    initial_topics = Keyword.get(opts, :initial_topics)
     jackalope_handler = Keyword.get(opts, :handler, Jackalope.Handler.Logger)
     max_work_list_size = Keyword.get(opts, :max_work_list_size, @default_max_work_list_size)
 
     children = [
       {Jackalope.Session,
        [
-         initial_topics: initial_topics,
          handler: jackalope_handler,
          max_work_list_size: max_work_list_size
        ]},
@@ -142,9 +141,7 @@ defmodule Jackalope do
   Request the MQTT client to reconnect to the broker
 
   This can be useful on devices that has multiple network
-  interfaces. After the reconnect Jackalope will subscribe to the
-  topic_filters it was subscribed to, ensuring that we are in sync
-  with the subscription state.
+  interfaces.
   """
   @spec reconnect() :: :ok
   defdelegate reconnect(), to: Jackalope.Session
@@ -187,62 +184,6 @@ defmodule Jackalope do
              ]
   defdelegate publish(topic, payload, opts \\ []), to: Jackalope.Session
 
-  @doc """
-  Place a subscription request for a given `topic_filter`
-
-  Once Jackalope has successfully subscribed to the `topic_filter` it
-  will get added to the list of topic filters to ensure when
-  reconnecting; this ensure that Jackalope have a consistent view of
-  the subscription state, even if the MQTT client reconnect with a
-  clean session state.
-
-    Jackalope.subscribe("rooms/living-room/temperature")
-
-  It is possible to specify the maximum quality of service to
-  subscribe to like so:
-
-    Jackalope.subscribe({"rooms/kitchen/water-leak-sensor", qos: 1})
-
-  The default QoS is 1; Notice that AWS IoT does not support
-  subscriptions with QoS=2, so only 0 and 1 are permitted.
-
-  Like the public message it is possible to set a time to live on the
-  subscribe request:
-
-    Jackalope.subscribe("golf/+/result", ttl: 5_000)
-
-  This will not dispatch the subscribe request Jackalope cannot get it
-  to the broker within the specified duration (in ms).
-  """
-  @spec subscribe(String.t(), options) ::
-          :ok | {:error, :invalid_qos} | {:error, :invalid_ttl}
-        when options: [
-               {:qos, 0..2} | {:ttl, non_neg_integer}
-             ]
-  defdelegate subscribe(topic_filter, opts \\ []), to: Jackalope.Session
-
-  @doc """
-  Place an unsubscribe request for the given `topic_filter`
-
-  This will place a unsubscribe and inform Jackalope to remove the
-  given `topic_filter` from the list of subscriptions to ensure.
-
-    Jackalope.unsubscribe("room/lobby/doorbell")
-
-  The only configuration option is the `ttl` value, which can be set
-  like so:
-
-    Jackalope.unsubscribe("room/lobby/doorbell", ttl: 1_000)
-
-  Like all the other messages, this will drop the message if it stays
-  too long in the queue.
-  """
-  @spec unsubscribe(String.t(), options) :: :ok | {:error, :invalid_qos} | {:error, :invalid_ttl}
-        when options: [
-               {:qos, 0..2} | {:ttl, non_neg_integer}
-             ]
-  defdelegate unsubscribe(topic_filter, opts \\ []), to: Jackalope.Session
-
   # TODO Get rid of this stuff
   defp connection_options(opts) do
     server =
@@ -252,10 +193,16 @@ defmodule Jackalope do
     # Default backoff options is 1 sec to 30 secs, doubling each time.
     backoff_opts = Keyword.get(opts, :backoff) || [min_interval: 1_000, max_interval: 30_000]
     Logger.info("[Jackalope] Connecting with backoff options #{inspect(backoff_opts)}")
+    initial_topics = Keyword.get(opts, :initial_topics)
+
+    subscriptions =
+      for topic_filter <- List.wrap(initial_topics),
+          do: {topic_filter, 1}
 
     [
       server: server,
-      backoff: backoff_opts
+      backoff: backoff_opts,
+      subscriptions: subscriptions
     ]
   end
 

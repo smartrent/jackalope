@@ -18,7 +18,6 @@ defmodule Jackalope.Session do
   alias Jackalope.{TortoiseClient, WorkList}
 
   @publish_options [:qos, :retain]
-  @subscribe_options [:qos]
   @work_list_options [:ttl]
   # One hour
   @default_ttl_msecs 3_600_000
@@ -26,8 +25,7 @@ defmodule Jackalope.Session do
   defstruct connection_status: :offline,
             handler: nil,
             work_list: nil,
-            pending: %{},
-            subscriptions: %{}
+            pending: %{}
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
@@ -41,44 +39,6 @@ defmodule Jackalope.Session do
   end
 
   ## MQTT-ing
-  @doc false
-  def subscribe(topic_filter, opts) when is_binary(topic_filter) do
-    subscribe_options = Keyword.take(opts, @subscribe_options)
-    work_list_options = Keyword.take(opts, @work_list_options)
-    ttl = Keyword.get(work_list_options, :ttl, @default_ttl_msecs)
-    cmd = {:subscribe, topic_filter, subscribe_options}
-
-    cond do
-      Keyword.get(subscribe_options, :qos, 0) not in 0..2 ->
-        {:error, :invalid_qos}
-
-      not (is_integer(ttl) and ttl > 0) ->
-        {:error, :invalid_ttl}
-
-      _opts_looks_good! = true ->
-        GenServer.cast(__MODULE__, {:cmd, cmd, work_list_options})
-    end
-  end
-
-  @doc false
-  def unsubscribe(topic_filter, opts) do
-    unsubscribe_options = Keyword.take(opts, @subscribe_options)
-    work_list_options = Keyword.take(opts, @work_list_options)
-    ttl = Keyword.get(work_list_options, :ttl, @default_ttl_msecs)
-    cmd = {:unsubscribe, topic_filter, unsubscribe_options}
-
-    cond do
-      Keyword.get(unsubscribe_options, :qos, 0) not in 0..2 ->
-        {:error, :invalid_qos}
-
-      not (is_integer(ttl) and ttl > 0) ->
-        {:error, :invalid_ttl}
-
-      _opts_looks_good! = true ->
-        GenServer.cast(__MODULE__, {:cmd, cmd, work_list_options})
-    end
-  end
-
   @doc false
   def publish(topic, payload, opts) when is_binary(topic) do
     publish_opts = Keyword.take(opts, @publish_options)
@@ -112,16 +72,9 @@ defmodule Jackalope.Session do
   @impl GenServer
   def init(opts) do
     handler = Keyword.fetch!(opts, :handler)
-    # Produce subscription commands for the initial subscriptions
-    initial_topics = Keyword.get(opts, :initial_topics)
     max_work_list_size = Keyword.fetch!(opts, :max_work_list_size)
-    default_expiration = WorkList.expiration(@default_ttl_msecs)
 
-    initial_items =
-      for topic_filter <- List.wrap(initial_topics),
-          do: {{:subscribe, topic_filter, []}, [expiration: default_expiration]}
-
-    work_list = WorkList.new(initial_items, max_work_list_size)
+    work_list = WorkList.new([], max_work_list_size)
 
     initial_state = %State{
       work_list: work_list,
@@ -145,37 +98,15 @@ defmodule Jackalope.Session do
 
   def handle_info({:connection_status, status}, state)
       when status in [:down, :terminating, :terminated] do
-    default_expiration = WorkList.expiration(@default_ttl_msecs)
-
-    subscription_items =
-      for(
-        {topic_filter, opts} <- state.subscriptions,
-        do: {{:subscribe, topic_filter, opts}, [expiration: default_expiration]}
-      )
-
     state = %State{
       state
-      | connection_status: :offline,
-        # Reset the subscriptions and schedule a resubscribe to all
-        # the current subscriptions for when we are back online. Note;
-        # MQTT sessions should be able to handle this, but we do it
-        # for good measure to ensure a consistent state of the world;
-        # an upcoming Tortoise311 version will track this state in the
-        # connection state, and the user can ask for it, so this
-        # problem will go away in the future; also, as we add the
-        # subscribe work-order at the front of the list, any
-        # unsubscribe placed should come after this, making sure we
-        # will not resubscribe to a topic we are no longer interested
-        # in.
-        subscriptions: %{},
-        work_list: WorkList.prepend(state.work_list, subscription_items)
+      | connection_status: :offline
     }
 
     {:noreply, state}
   end
 
-  # Handle responses to user initiated commands; subscribe,
-  # unsubscribe, publish...
+  # Handle responses to user initiated publish...
   def handle_info(
         {:tortoise_result, ref, res},
         %State{pending: pending} = state
@@ -189,31 +120,7 @@ defmodule Jackalope.Session do
         {:noreply, state}
 
       :ok ->
-        case work_item do
-          {{:subscribe, topic, subscription_opts}, _opts} ->
-            # Note that all subscriptions has to go through Jackalope;
-            # for that reason we cannot use the "initial
-            # subscriptions" in Tortoise311, as Jackalope would not know
-            # about them; the upcoming Tortoise311 will expose a function
-            # for the subscriptions state!
-            state = %State{
-              state
-              | subscriptions: Map.put(state.subscriptions, topic, subscription_opts)
-            }
-
-            {:noreply, state}
-
-          {{:unsubscribe, topic, _}, _opts} ->
-            state = %State{
-              state
-              | subscriptions: Map.delete(state.subscriptions, topic)
-            }
-
-            {:noreply, state}
-
-          _otherwise ->
-            {:noreply, state}
-        end
+        {:noreply, state}
 
       {:error, reason} ->
         Logger.warn("Retrying message, failed with reason: #{inspect(reason)}")
@@ -260,8 +167,7 @@ defmodule Jackalope.Session do
       | connection_status: :offline,
         # We will republish all the messages we got in pending; this
         # might result in messages being received twice, but this is
-        # already an issue with QoS=1 messages; subscribes and
-        # unsubscribes should be idempotent
+        # already an issue with QoS=1 messages.
         pending: %{},
         work_list: WorkList.prepend(state.work_list, pending_work_items)
     }
@@ -327,15 +233,5 @@ defmodule Jackalope.Session do
 
   defp execute_work({:publish, topic, payload, opts}) do
     TortoiseClient.publish(topic, payload, opts)
-  end
-
-  defp execute_work({:subscribe, topic_filter, opts}) do
-    TortoiseClient.subscribe(topic_filter, opts)
-  end
-
-  defp execute_work({:unsubscribe, topic_filter, opts}) do
-    # the unsubscribe does not take any options, but it might do in
-    # the future, keeping it to make future upgrades easier
-    TortoiseClient.unsubscribe(topic_filter, opts)
   end
 end

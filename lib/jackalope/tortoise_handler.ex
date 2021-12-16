@@ -46,9 +46,6 @@ defmodule Jackalope.TortoiseHandler do
       _ignored = apply(state.handler, :subscription, [status, topic_filter])
     end
 
-    # Jackalope itself will track the subscription status by observing
-    # the responses to subscribe and unsubscribe messages, so we don't
-    # need to send a message to jackalope here.
     {:ok, state}
   end
 

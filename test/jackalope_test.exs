@@ -29,8 +29,6 @@ defmodule JackalopeTest do
       assert Process.alive?(pid)
 
       assert_receive {MqttServer, :completed}, 200
-
-      assert %{subscriptions: %{}} = Jackalope.Session.status()
     end
 
     test "connect to a MQTT server with initial subscribe topics (tcp)", context do
@@ -76,31 +74,6 @@ defmodule JackalopeTest do
       assert received_publish = flush.()
       assert %Package.Publish{topic: "foo", qos: 1} = received_publish
       assert expected_payload == Jason.decode!(received_publish.payload)
-    end
-  end
-
-  describe "subscribe/2" do
-    test "subscribe to a topic filter with QoS=0", context do
-      _ = connect(context)
-      assert :ok = Jackalope.subscribe("foo/bar", qos: 0)
-      {:ok, subscribe} = expect_subscribe(context, [{"foo/bar", 0}])
-      :ok = acknowledge_subscribe(context, subscribe, [{:ok, 0}])
-    end
-
-    test "subscribe to a topic filter with QoS=1", context do
-      _ = connect(context)
-      assert :ok = Jackalope.subscribe("foo/bar", qos: 1)
-      {:ok, subscribe} = expect_subscribe(context, [{"foo/bar", 1}])
-      :ok = acknowledge_subscribe(context, subscribe, [{:ok, 1}])
-    end
-  end
-
-  describe "unsubscribe/2" do
-    test "unsubscribe from a topic filter", context do
-      _ = connect(context)
-      assert :ok = Jackalope.unsubscribe("foo/bar")
-      {:ok, unsubscribe} = expect_unsubscribe(context, ["foo/bar"])
-      :ok = acknowledge_unsubscribe(context, unsubscribe)
     end
   end
 
@@ -247,33 +220,6 @@ defmodule JackalopeTest do
        when not is_nil(id) and length(topics) == length(acks) do
     suback = %Package.Suback{identifier: id, acks: acks}
     script = [{:send, suback}]
-    {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
-    # expect the scripted server to dispatch the suback
-    assert_receive {MqttServer, :completed}
-    :ok
-  end
-
-  defp expect_unsubscribe(context, %Package.Unsubscribe{} = unsubscribe) do
-    # setup the expectation that the server will receive a unsubscribe
-    # package from the client
-    script = [{:receive, unsubscribe}]
-    {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
-    assert_receive {MqttServer, {:received, package = %Package.Unsubscribe{}}}
-    assert_receive {MqttServer, :completed}
-
-    {:ok, package}
-  end
-
-  defp expect_unsubscribe(context, [topic_filter | _] = unsubscribe_topics)
-       when is_binary(topic_filter) do
-    unsubscribe = %Package.Unsubscribe{topics: unsubscribe_topics}
-    expect_unsubscribe(context, unsubscribe)
-  end
-
-  defp acknowledge_unsubscribe(context, %Package.Unsubscribe{identifier: id})
-       when not is_nil(id) do
-    unsuback = %Package.Unsuback{identifier: id}
-    script = [{:send, unsuback}]
     {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
     # expect the scripted server to dispatch the suback
     assert_receive {MqttServer, :completed}
