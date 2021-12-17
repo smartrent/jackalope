@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6.0
+
+* Updates
+  * BREAKING CHANGE: Dynamic subscriptions are no longer supported
+  * :infinity is no longer the default for publish work item TTL or work list bound
+  * BREAKING CHANGE: The API for publishing is simplified; there's now only one publish call
+
+* Fixes
+  * Dynamic subscriptions were broken in failure and retry scenarios, removing support for them fixes that
+
 ## v0.5.1
 
 * Updates
