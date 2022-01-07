@@ -5,11 +5,10 @@ defmodule Jackalope.PersistentWorkList do
   use GenServer
   require Logger
 
-  alias Jackalope.WorkList
-
-  @behaviour WorkList
+  alias Jackalope.WorkList.Expiration
 
   @default_max_size 100
+
   @tick_delay 10 * 60 * 1_000
 
   defmodule State do
@@ -18,85 +17,43 @@ defmodule Jackalope.PersistentWorkList do
               queue: nil,
               queue_name: nil,
               max_work_list_size: nil,
-              expiration_fn: nil
+              expiration_fn: nil,
+              update_expiration_fn: nil
   end
 
-  @doc "Starts the CubQ process"
-  @spec start_link(list()) :: GenServer.on_start()
-  def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  def new(expiration_fn, update_expiration_fn, max_size \\ @default_max_size, opts \\ []) do
+    args = [
+      expiration_fn: expiration_fn,
+      update_expiration_fn: update_expiration_fn,
+      max_size: max_size,
+      opts: opts
+    ]
+
+    Logger.info("[Jackalope] Starting #{__MODULE__} with #{inspect(opts)}")
+    {:ok, pid} = GenServer.start_link(__MODULE__, args)
+    pid
   end
 
-  @doc "Stops the CubQ process"
-  @spec stop() :: :ok
-  def stop() do
-    GenServer.stop(__MODULE__, :normal)
-  catch
-    :exit, _ -> :ok
-  end
-
-  @impl WorkList
-  def new(expiration_fn, update_expiration_fn, max_size \\ @default_max_size) do
-    :ok = GenServer.call(__MODULE__, {:new, expiration_fn, update_expiration_fn, max_size})
-    __MODULE__
-  end
-
-  @impl WorkList
-  def peek(work_list) do
-    GenServer.call(work_list, :peek)
-  end
-
-  @impl WorkList
-  def push(work_list, item) do
-    :ok = GenServer.call(work_list, {:push, item})
-    work_list
-  end
-
-  @impl WorkList
-  def pop(work_list) do
-    :ok = GenServer.call(work_list, :pop)
-    work_list
-  end
-
-  @impl WorkList
-  def pending(work_list, ref) do
-    :ok = GenServer.call(work_list, {:pending, ref})
-    work_list
-  end
-
-  @impl WorkList
-  def reset_pending(work_list) do
-    :ok = GenServer.call(work_list, :reset_pending)
-    work_list
-  end
-
-  @impl WorkList
-  def done(work_list, ref) do
-    item = GenServer.call(work_list, {:done, ref})
-    {work_list, item}
-  end
-
-  @impl WorkList
-  def count(work_list) do
-    GenServer.call(work_list, :count)
-  end
-
-  @impl WorkList
-  def count_pending(work_list) do
-    GenServer.call(work_list, :count_pending)
-  end
-
-  @impl WorkList
-  def empty?(work_list), do: peek(work_list) == nil
-
-  @impl WorkList
-  def remove_all(work_list) do
-    :ok = GenServer.call(work_list, :remove_all)
-    work_list
-  end
+  # @doc "Stops the CubQ process"
+  # @spec stop() :: :ok
+  # def stop() do
+  #   GenServer.stop(__MODULE__, :normal)
+  # catch
+  #   :exit, _ -> :ok
+  # end
 
   @impl GenServer
-  def init(opts) do
+  @spec init(keyword) ::
+          {:ok,
+           %Jackalope.PersistentWorkList.State{
+             db: atom | pid | {atom, any} | {:via, atom, any},
+             expiration_fn: nil,
+             max_work_list_size: nil,
+             queue: any,
+             queue_name: any
+           }, {:continue, :recover}}
+  def init(args) do
+    opts = Keyword.fetch!(args, :opts)
     data_dir = Keyword.get(opts, :data_dir, "/data/jackalope")
     queue_name = Keyword.get(opts, :queue_name, :items)
 
@@ -137,8 +94,17 @@ defmodule Jackalope.PersistentWorkList do
        db: db,
        queue: queue,
        queue_name: queue_name,
-       max_work_list_size: nil
-     }}
+       max_work_list_size: Keyword.fetch!(args, :max_size),
+       expiration_fn: Keyword.fetch!(args, :expiration_fn),
+       update_expiration_fn: Keyword.fetch!(args, :update_expiration_fn)
+     }, {:continue, :recover}}
+  end
+
+  @impl GenServer
+  def handle_continue(:recover, state) do
+    recover(state, state.expiration_fn, state.update_expiration_fn)
+    CubDB.put(state.db, :pending, %{})
+    {:noreply, state}
   end
 
   @impl GenServer
@@ -149,15 +115,6 @@ defmodule Jackalope.PersistentWorkList do
   end
 
   @impl GenServer
-  def handle_call({:new, expiration_fn, update_expiration_fn, max_size}, _from, state) do
-    # Re-queue pending items, rebasing their expiration with the new monotonic system time
-    recover(state, expiration_fn, update_expiration_fn)
-
-    CubDB.put(state.db, :pending, %{})
-
-    {:reply, :ok, %State{state | expiration_fn: expiration_fn, max_work_list_size: max_size}}
-  end
-
   def handle_call(:count, _from, state) do
     {:reply, queue_size(state), state}
   end
@@ -262,7 +219,7 @@ defmodule Jackalope.PersistentWorkList do
         # remove from begining
         {:ok, item} = CubQ.dequeue(state.queue)
 
-        if WorkList.unexpired?(item, state.expiration_fn) do
+        if Expiration.unexpired?(item, state.expiration_fn) do
           # same as push (insert at end)
           :ok = CubQ.enqueue(state.queue, item)
         else
@@ -283,7 +240,7 @@ defmodule Jackalope.PersistentWorkList do
           pending,
           [],
           fn {ref, item}, acc ->
-            if WorkList.unexpired?(item, state.expiration_fn) do
+            if Expiration.unexpired?(item, state.expiration_fn) do
               [{ref, item} | acc]
             else
               acc
@@ -295,7 +252,7 @@ defmodule Jackalope.PersistentWorkList do
       if length(kept_pairs) > state.max_work_list_size do
         [{ref, item} | newer_pairs] =
           Enum.sort(kept_pairs, fn {_, item1}, {_, item2} ->
-            WorkList.after?(state.expiration_fn.(item2), state.expiration_fn.(item1))
+            Expiration.after?(state.expiration_fn.(item2), state.expiration_fn.(item1))
           end)
 
         Logger.warn(
@@ -320,7 +277,7 @@ defmodule Jackalope.PersistentWorkList do
   defp queue_size(state), do: CubDB.size(state.db) - 2
 
   defp record_time_now(state) do
-    :ok = CubDB.put(state.db, :latest_time, WorkList.now())
+    :ok = CubDB.put(state.db, :latest_time, Expiration.now())
   end
 
   # After restart, recover and rebase the persisted items from the previous to the new system monotonic time.
@@ -328,7 +285,7 @@ defmodule Jackalope.PersistentWorkList do
   defp recover(state, expiration_fn, update_expiration_fn) do
     # latest_time is nil if this is a never-persisted work list
     latest_time = CubDB.get(state.db, :latest_time)
-    now = WorkList.now()
+    now = Expiration.now()
     # Rebase the expiration of queued (waiting) items
     items_count = queue_size(state)
 
@@ -337,7 +294,7 @@ defmodule Jackalope.PersistentWorkList do
         1..items_count,
         fn _i ->
           {:ok, waiting_item} = CubQ.dequeue(state.queue)
-          expiration = WorkList.rebase_expiration(expiration_fn.(waiting_item), latest_time, now)
+          expiration = Expiration.rebase_expiration(expiration_fn.(waiting_item), latest_time, now)
           :ok = CubQ.enqueue(state.queue, update_expiration_fn.(waiting_item, expiration))
         end
       )
@@ -347,8 +304,54 @@ defmodule Jackalope.PersistentWorkList do
 
     pending_items(state)
     |> Enum.each(fn pending_item ->
-      expiration = WorkList.rebase_expiration(expiration_fn.(pending_item), latest_time, now)
+      expiration = Expiration.rebase_expiration(expiration_fn.(pending_item), latest_time, now)
       :ok = CubQ.enqueue(state.queue, update_expiration_fn.(pending_item, expiration))
     end)
+  end
+end
+
+defimpl Jackalope.WorkList, for: PID do
+  def peek(work_list) do
+    GenServer.call(work_list, :peek)
+  end
+
+  def push(work_list, item) do
+    :ok = GenServer.call(work_list, {:push, item})
+    work_list
+  end
+
+  def pop(work_list) do
+    :ok = GenServer.call(work_list, :pop)
+    work_list
+  end
+
+  def pending(work_list, ref) do
+    :ok = GenServer.call(work_list, {:pending, ref})
+    work_list
+  end
+
+  def reset_pending(work_list) do
+    :ok = GenServer.call(work_list, :reset_pending)
+    work_list
+  end
+
+  def done(work_list, ref) do
+    item = GenServer.call(work_list, {:done, ref})
+    {work_list, item}
+  end
+
+  def count(work_list) do
+    GenServer.call(work_list, :count)
+  end
+
+  def count_pending(work_list) do
+    GenServer.call(work_list, :count_pending)
+  end
+
+  def empty?(work_list), do: peek(work_list) == nil
+
+  def remove_all(work_list) do
+    :ok = GenServer.call(work_list, :remove_all)
+    work_list
   end
 end

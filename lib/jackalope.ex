@@ -123,24 +123,25 @@ defmodule Jackalope do
 
     work_list_mod = Keyword.get(opts, :work_list_mod, @default_work_list_module)
 
-    children =
-      [
-        {Jackalope.Session,
-         [
-           handler: jackalope_handler,
-           max_work_list_size: max_work_list_size,
-           work_list_mod: work_list_mod
-         ]},
-        {Jackalope.Supervisor,
-         [
-           handler: jackalope_handler,
-           client_id: client_id,
-           connection_options: connection_options(opts),
-           last_will: Keyword.get(opts, :last_will),
-           work_list_mod: @default_work_list_module
-         ]}
-      ]
-      |> maybe_add_persistent_work_list(work_list_mod, opts)
+    children = [
+      {Jackalope.Session,
+       [
+         handler: jackalope_handler,
+         max_work_list_size: max_work_list_size,
+         work_list_mod: work_list_mod,
+         data_dir: Keyword.get(opts, :data_dir)
+       ]},
+      {Jackalope.Supervisor,
+       [
+         handler: jackalope_handler,
+         client_id: client_id,
+         connection_options: connection_options(opts),
+         last_will: Keyword.get(opts, :last_will),
+         work_list_mod: @default_work_list_module
+       ]}
+    ]
+
+    # |> maybe_add_persistent_work_list(work_list_mod, opts)
 
     # Supervision strategy is rest for one, as a crash in Jackalope
     # would result in inconsistent state in Jackalope; we would not be
@@ -231,13 +232,13 @@ defmodule Jackalope do
     raise ArgumentError, "Please specify a Tortoise311 transport for the server"
   end
 
-  defp maybe_add_persistent_work_list(children, work_list_mod, opts) do
-    case work_list_mod do
-      Jackalope.TransientWorkList ->
-        children
+  # defp maybe_add_persistent_work_list(children, work_list_mod, opts) do
+  #   case work_list_mod do
+  #     Jackalope.TransientWorkList ->
+  #       children
 
-      Jackalope.PersistentWorkList ->
-        [{Jackalope.PersistentWorkList, opts} | children]
-    end
-  end
+  #     Jackalope.PersistentWorkList ->
+  #       [{Jackalope.PersistentWorkList, opts} | children]
+  #   end
+  # end
 end

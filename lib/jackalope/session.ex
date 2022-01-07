@@ -16,6 +16,7 @@ defmodule Jackalope.Session do
 
   alias __MODULE__, as: State
   alias Jackalope.{TortoiseClient, WorkList}
+  alias Jackalope.WorkList.Expiration
 
   @publish_options [:qos, :retain]
   @work_list_options [:ttl]
@@ -74,15 +75,16 @@ defmodule Jackalope.Session do
     max_work_list_size = Keyword.fetch!(opts, :max_work_list_size)
     work_list_mod = Keyword.fetch!(opts, :work_list_mod)
 
-    work_list_inst =
+    work_list =
       work_list_mod.new(
         fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
         fn {cmd, opts}, expiration -> {cmd, Keyword.put(opts, :expiration, expiration)} end,
-        max_work_list_size
+        max_work_list_size,
+        opts
       )
 
     initial_state = %State{
-      work_list: {work_list_mod, work_list_inst},
+      work_list: work_list,
       handler: handler
     }
 
@@ -146,7 +148,7 @@ defmodule Jackalope.Session do
     # to stay in the work list before it is deemed irrelevant
     ttl = Keyword.get(opts, :ttl, @default_ttl_msecs)
 
-    expiration = WorkList.expiration(ttl)
+    expiration = Expiration.expiration(ttl)
 
     # Note that we don't really concern ourselves with the order of
     # the commands; the work_list is a list (and thus a stack) and when
@@ -231,5 +233,5 @@ defmodule Jackalope.Session do
     TortoiseClient.publish(topic, payload, opts)
   end
 
-  defp expired?(expiration), do: WorkList.after?(WorkList.expiration(0), expiration)
+  defp expired?(expiration), do: Expiration.after?(Expiration.expiration(0), expiration)
 end

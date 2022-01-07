@@ -4,6 +4,7 @@ defmodule JackalopeTest do
 
   alias JackalopeTest.ScriptedMqttServer, as: MqttServer
   alias Jackalope.WorkList
+  alias Jackalope.WorkList.Expiration
   alias Tortoise311.Package
 
   @work_list_mod Jackalope.PersistentWorkList
@@ -96,7 +97,7 @@ defmodule JackalopeTest do
           WorkList.push(
             acc,
             {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
-             [expiration: WorkList.expiration(:infinity)]}
+             [expiration: Expiration.expiration(:infinity)]}
           )
         end)
 
@@ -116,7 +117,7 @@ defmodule JackalopeTest do
           WorkList.push(
             acc,
             {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
-             [expiration: WorkList.expiration(:infinity)]}
+             [expiration: Expiration.expiration(:infinity)]}
           )
         end)
 
@@ -142,7 +143,7 @@ defmodule JackalopeTest do
           WorkList.push(
             acc,
             {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
-             [expiration: WorkList.expiration(:infinity)]}
+             [expiration: Expiration.expiration(:infinity)]}
           )
           |> WorkList.pending(make_ref())
         end)
@@ -163,7 +164,7 @@ defmodule JackalopeTest do
           WorkList.push(
             acc,
             {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
-             [expiration: WorkList.expiration(:infinity)]}
+             [expiration: Expiration.expiration(:infinity)]}
           )
         end)
 
@@ -183,15 +184,15 @@ defmodule JackalopeTest do
     end
 
     test "rebasing expiration" do
-      time = WorkList.now()
-      exp1 = WorkList.expiration(100)
-      exp2 = WorkList.expiration(200)
+      time = Expiration.now()
+      exp1 = Expiration.expiration(100)
+      exp2 = Expiration.expiration(200)
       stop_time = time + 10
-      assert WorkList.after?(exp2, exp1)
+      assert Expiration.after?(exp2, exp1)
       restart_time = Enum.random(-10_000..10_000)
-      ttl1 = WorkList.rebase_expiration(exp1, stop_time, restart_time)
-      ttl2 = WorkList.rebase_expiration(exp2, stop_time, restart_time)
-      assert WorkList.after?(exp2, exp1)
+      ttl1 = Expiration.rebase_expiration(exp1, stop_time, restart_time)
+      ttl2 = Expiration.rebase_expiration(exp2, stop_time, restart_time)
+      assert Expiration.after?(exp2, exp1)
       assert ttl1 == restart_time + 90
       assert ttl2 <= restart_time + 190
     end
