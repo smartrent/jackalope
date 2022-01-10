@@ -34,7 +34,7 @@ defmodule JackalopeTest do
     test "connect to a MQTT server with initial subscribe topics (tcp)", context do
       # When we connect with a initial topics list set we will expect
       # a subscribe package on the server side after we connect;
-      {:ok, _pid} = connect(context, initial_topics: ["foo/bar"])
+      connect(context, initial_topics: ["foo/bar"])
       {:ok, subscribe} = expect_subscribe(context, [{"foo/bar", 1}])
       :ok = acknowledge_subscribe(context, subscribe, [{:ok, 1}])
     end
@@ -42,7 +42,7 @@ defmodule JackalopeTest do
 
   describe "publish/3" do
     test "publish with QoS=0", context do
-      _ = connect(context)
+      connect(context)
 
       flush =
         expect_publish(
@@ -59,7 +59,7 @@ defmodule JackalopeTest do
     end
 
     test "publish with QoS=1", context do
-      _ = connect(context)
+      connect(context)
 
       flush =
         expect_publish(
@@ -83,7 +83,7 @@ defmodule JackalopeTest do
 
   describe "work list" do
     test "dropping work orders", context do
-      _ = connect(context, max_work_list_size: 10)
+      connect(context, max_work_list_size: 10)
 
       for i <- 1..15 do
         assert :ok = Jackalope.publish("foo", %{"msg" => "hello #{i}"}, qos: 1)
@@ -94,7 +94,7 @@ defmodule JackalopeTest do
     end
 
     test "pending and done work items", context do
-      _ = connect(context, max_work_list_size: 10)
+      connect(context, max_work_list_size: 10)
 
       for i <- 1..5 do
         assert :ok = Jackalope.publish("foo", %{"msg" => "hello #{i}"}, qos: 1)
@@ -111,7 +111,7 @@ defmodule JackalopeTest do
     end
 
     test "reset_pending work items", context do
-      _ = connect(context, max_work_list_size: 10)
+      connect(context, max_work_list_size: 10)
 
       for i <- 1..5 do
         assert :ok = Jackalope.publish("foo", %{"msg" => "hello #{i}"}, qos: 1)
@@ -150,36 +150,20 @@ defmodule JackalopeTest do
     handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
     initial_topics = Keyword.get(opts, :initial_topics)
     max_work_list_size = Keyword.get(opts, :max_work_list_size, 100)
-    # Timing issue hack: Make sure the Session is fully terminated before we reconnect
-    # and have the Jackelope supervisor initiated another of the same name
-    kill_session()
 
-    result =
-      Jackalope.start_link(
-        server: transport,
-        client_id: client_id,
-        handler: handler,
-        initial_topics: initial_topics,
-        max_work_list_size: max_work_list_size
-      )
-
-    pid =
-      case result do
-        {:ok, pid} -> pid
-        {:error, {:already_started, pid}} -> pid
-      end
-
-    assert is_pid(pid)
+    start_supervised!(
+      {Jackalope,
+       [
+         server: transport,
+         client_id: client_id,
+         handler: handler,
+         initial_topics: initial_topics,
+         max_work_list_size: max_work_list_size
+       ]}
+    )
 
     assert_receive {MqttServer, {:received, %Package.Connect{client_id: ^client_id}}}
     assert_receive {MqttServer, :completed}
-    {:ok, pid}
-  end
-
-  defp kill_session() do
-    GenServer.stop(Jackalope.Session, :shutdown)
-  catch
-    :exit, _ -> :ok
   end
 
   defp expect_publish(context, %Package.Publish{qos: 0} = publish) do
