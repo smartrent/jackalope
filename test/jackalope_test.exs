@@ -77,6 +77,10 @@ defmodule JackalopeTest do
     end
   end
 
+  defp get_session_worklist() do
+    :sys.get_state(Jackalope.Session).work_list
+  end
+
   describe "work list" do
     test "dropping work orders", context do
       _ = connect(context, max_work_list_size: 10)
@@ -85,7 +89,7 @@ defmodule JackalopeTest do
         assert :ok = Jackalope.publish("foo", %{"msg" => "hello #{i}"}, qos: 1)
       end
 
-      work_list = Jackalope.Session.status() |> Map.fetch!(:work_list)
+      work_list = get_session_worklist()
       assert Jackalope.WorkList.count(work_list) == 10
     end
 
@@ -96,11 +100,12 @@ defmodule JackalopeTest do
         assert :ok = Jackalope.publish("foo", %{"msg" => "hello #{i}"}, qos: 1)
       end
 
-      work_list = Jackalope.Session.status() |> Map.fetch!(:work_list)
       ref = make_ref()
 
-      work_list = Jackalope.WorkList.pending(work_list, ref)
-      {work_list, _item} = Jackalope.WorkList.done(work_list, ref)
+      {work_list, _item} =
+        get_session_worklist()
+        |> Jackalope.WorkList.pending(ref)
+        |> Jackalope.WorkList.done(ref)
 
       assert Jackalope.WorkList.count(work_list) == 4
     end
@@ -112,7 +117,7 @@ defmodule JackalopeTest do
         assert :ok = Jackalope.publish("foo", %{"msg" => "hello #{i}"}, qos: 1)
       end
 
-      work_list = Jackalope.Session.status() |> Map.fetch!(:work_list)
+      work_list = get_session_worklist()
       ref = make_ref()
 
       work_list = Jackalope.WorkList.pending(work_list, ref)
