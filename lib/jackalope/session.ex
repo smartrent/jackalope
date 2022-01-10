@@ -59,12 +59,6 @@ defmodule Jackalope.Session do
   end
 
   @doc false
-  @spec status() :: map()
-  def status() do
-    GenServer.call(__MODULE__, :status)
-  end
-
-  @doc false
   @spec reconnect() :: :ok
   def reconnect() do
     GenServer.cast(__MODULE__, :reconnect)
@@ -83,11 +77,6 @@ defmodule Jackalope.Session do
     }
 
     {:ok, initial_state, {:continue, :consume_work_list}}
-  end
-
-  @impl GenServer
-  def handle_call(:status, _from, %State{} = state) do
-    {:reply, Map.from_struct(state), state}
   end
 
   @impl GenServer
