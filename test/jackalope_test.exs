@@ -77,7 +77,7 @@ defmodule JackalopeTest do
     end
   end
 
-  defp get_session_worklist() do
+  defp get_session_work_list() do
     :sys.get_state(Jackalope.Session).work_list
   end
 
@@ -89,7 +89,7 @@ defmodule JackalopeTest do
         assert :ok = Jackalope.publish("foo", %{"msg" => "hello #{i}"}, qos: 1)
       end
 
-      work_list = get_session_worklist()
+      work_list = get_session_work_list()
       assert Jackalope.WorkList.count(work_list) == 10
     end
 
@@ -103,7 +103,7 @@ defmodule JackalopeTest do
       ref = make_ref()
 
       {work_list, _item} =
-        get_session_worklist()
+        get_session_work_list()
         |> Jackalope.WorkList.pending(ref)
         |> Jackalope.WorkList.done(ref)
 
@@ -117,7 +117,7 @@ defmodule JackalopeTest do
         assert :ok = Jackalope.publish("foo", %{"msg" => "hello #{i}"}, qos: 1)
       end
 
-      work_list = get_session_worklist()
+      work_list = get_session_work_list()
       ref = make_ref()
 
       work_list = Jackalope.WorkList.pending(work_list, ref)
