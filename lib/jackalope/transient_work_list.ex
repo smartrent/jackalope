@@ -16,14 +16,14 @@ defmodule Jackalope.TransientWorkList do
   @type t() :: %__MODULE__{items: list(), max_size: non_neg_integer()}
 
   @doc "Create a new work list"
-  @spec new(function(), function(), non_neg_integer(), Keyword.t()) ::
-          Jackalope.TransientWorkList.t()
+  @spec new(function(), function(), non_neg_integer(), Keyword.t()) :: t()
   def new(expiration_fn, _update_expiration_fn, max_size \\ @default_max_size, _opts \\ [])
       when max_size > 0 do
     %__MODULE__{max_size: max_size, expiration_fn: expiration_fn}
   end
 
   @doc false
+  @spec prepend(t(), list()) :: t()
   def prepend(work_list, items) when is_list(items) do
     updated_items =
       (items ++ work_list.items)
@@ -33,6 +33,7 @@ defmodule Jackalope.TransientWorkList do
   end
 
   @doc false
+  @spec bound_pending_items(any, atom | t()) :: any
   def bound_pending_items(pending, work_list) do
     if Enum.count(pending) > work_list.max_size do
       # Trim expired pending requests
@@ -71,6 +72,7 @@ defmodule Jackalope.TransientWorkList do
   end
 
   @doc false
+  @spec bound_work_items([any()], t()) :: [any()]
   def bound_work_items(items, work_list) do
     current_size = length(items)
 
@@ -117,6 +119,7 @@ defimpl Jackalope.WorkList, for: Jackalope.TransientWorkList do
   alias Jackalope.TransientWorkList
   require Logger
 
+  @impl Jackalope.WorkList
   def push(work_list, item) do
     updated_items =
       [item | work_list.items]
@@ -125,14 +128,17 @@ defimpl Jackalope.WorkList, for: Jackalope.TransientWorkList do
     %TransientWorkList{work_list | items: updated_items}
   end
 
+  @impl Jackalope.WorkList
   def peek(work_list) do
     List.first(work_list.items)
   end
 
+  @impl Jackalope.WorkList
   def pop(work_list) do
     %TransientWorkList{work_list | items: tl(work_list.items)}
   end
 
+  @impl Jackalope.WorkList
   def pending(work_list, ref) do
     item = hd(work_list.items)
 
@@ -146,30 +152,36 @@ defimpl Jackalope.WorkList, for: Jackalope.TransientWorkList do
     }
   end
 
+  @impl Jackalope.WorkList
   def reset_pending(work_list) do
     pending_items = Map.values(work_list.pending)
 
     TransientWorkList.prepend(%TransientWorkList{work_list | pending: %{}}, pending_items)
   end
 
+  @impl Jackalope.WorkList
   def done(work_list, ref) do
     {item, pending} = Map.pop(work_list.pending, ref)
     # item can be nil
     {%TransientWorkList{work_list | pending: pending}, item}
   end
 
+  @impl Jackalope.WorkList
   def count(work_list) do
     length(work_list.items)
   end
 
+  @impl Jackalope.WorkList
   def count_pending(work_list) do
     Enum.count(work_list.pending)
   end
 
+  @impl Jackalope.WorkList
   def empty?(work_list) do
     work_list.items == []
   end
 
+  @impl Jackalope.WorkList
   def remove_all(work_list) do
     %TransientWorkList{work_list | items: [], pending: %{}}
   end

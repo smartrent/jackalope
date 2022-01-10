@@ -300,45 +300,55 @@ defmodule Jackalope.PersistentWorkList do
 end
 
 defimpl Jackalope.WorkList, for: PID do
+  @impl Jackalope.WorkList
   def peek(work_list) do
     GenServer.call(work_list, :peek)
   end
 
+  @impl Jackalope.WorkList
   def push(work_list, item) do
     :ok = GenServer.call(work_list, {:push, item})
     work_list
   end
 
+  @impl Jackalope.WorkList
   def pop(work_list) do
     :ok = GenServer.call(work_list, :pop)
     work_list
   end
 
+  @impl Jackalope.WorkList
   def pending(work_list, ref) do
     :ok = GenServer.call(work_list, {:pending, ref})
     work_list
   end
 
+  @impl Jackalope.WorkList
   def reset_pending(work_list) do
     :ok = GenServer.call(work_list, :reset_pending)
     work_list
   end
 
+  @impl Jackalope.WorkList
   def done(work_list, ref) do
     item = GenServer.call(work_list, {:done, ref})
     {work_list, item}
   end
 
+  @impl Jackalope.WorkList
   def count(work_list) do
     GenServer.call(work_list, :count)
   end
 
+  @impl Jackalope.WorkList
   def count_pending(work_list) do
     GenServer.call(work_list, :count_pending)
   end
 
+  @impl Jackalope.WorkList
   def empty?(work_list), do: peek(work_list) == nil
 
+  @impl Jackalope.WorkList
   def remove_all(work_list) do
     :ok = GenServer.call(work_list, :remove_all)
     work_list
