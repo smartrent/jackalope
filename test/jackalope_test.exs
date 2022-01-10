@@ -92,7 +92,7 @@ defmodule JackalopeTest do
       connect(context, max_work_list_size: 10)
       pause_mqtt_server(context)
 
-      work_list = get_work_list()
+      work_list = get_session_work_list()
 
       work_list =
         Enum.reduce(1..15, work_list, fn i, acc ->
@@ -103,7 +103,6 @@ defmodule JackalopeTest do
           )
         end)
 
-      work_list = get_session_work_list()
       assert WorkList.count(work_list) == 10
     end
 
@@ -111,7 +110,7 @@ defmodule JackalopeTest do
       connect(context, max_work_list_size: 10)
       pause_mqtt_server(context)
 
-      work_list = get_work_list()
+      work_list = get_session_work_list()
 
       work_list =
         Enum.reduce(1..5, work_list, fn i, acc ->
@@ -127,7 +126,7 @@ defmodule JackalopeTest do
       ref = make_ref()
 
       {work_list, _item} =
-        get_session_work_list()
+        work_list
         |> WorkList.pending(ref)
         |> WorkList.done(ref)
 
@@ -138,7 +137,7 @@ defmodule JackalopeTest do
       connect(context, max_work_list_size: 10)
       pause_mqtt_server(context)
 
-      work_list = get_work_list()
+      work_list = get_session_work_list()
 
       work_list =
         Enum.reduce(1..15, work_list, fn i, acc ->
@@ -231,7 +230,7 @@ defmodule JackalopeTest do
     assert_receive {MqttServer, {:received, %Package.Connect{client_id: ^client_id}}}
     assert_receive {MqttServer, :completed}
 
-    work_list = get_work_list()
+    work_list = get_session_work_list()
     WorkList.remove_all(work_list)
     assert WorkList.empty?(work_list)
   end
@@ -293,10 +292,6 @@ defmodule JackalopeTest do
   defp pause_mqtt_server(context) do
     {:ok, _} = MqttServer.enact(context.mqtt_server_pid, [:pause])
     Process.sleep(100)
-  end
-
-  defp get_work_list() do
-    :sys.get_state(Jackalope.Session) |> Map.fetch!(:work_list)
   end
 
   # defp expect_subscribe(context, %Package.Subscribe{} = subscribe) do
