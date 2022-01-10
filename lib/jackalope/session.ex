@@ -32,9 +32,14 @@ defmodule Jackalope.Session do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @spec whereis() :: pid | nil
-  def whereis() do
-    GenServer.whereis(__MODULE__)
+  @spec report_tortoise_result(reference(), any) :: :ok
+  def report_tortoise_result(reference, result) do
+    GenServer.cast(__MODULE__, {:report_tortoise_result, reference, result})
+  end
+
+  @spec report_connection_status(:up | :down | :terminating | :terminated) :: :ok
+  def report_connection_status(status) do
+    GenServer.cast(__MODULE__, {:report_connection_status, status})
   end
 
   ## MQTT-ing
@@ -81,24 +86,20 @@ defmodule Jackalope.Session do
 
   @impl GenServer
   # Connection status changes
-  def handle_info({:connection_status, :up}, state) do
+  def handle_cast({:report_connection_status, :up}, state) do
     state = %State{state | connection_status: :online}
     {:noreply, state, {:continue, :consume_work_list}}
   end
 
-  def handle_info({:connection_status, status}, state)
+  def handle_cast({:report_connection_status, status}, state)
       when status in [:down, :terminating, :terminated] do
-    state = %State{
-      state
-      | connection_status: :offline
-    }
-
+    state = %State{state | connection_status: :offline}
     {:noreply, state}
   end
 
   # Handle responses to user initiated publish...
-  def handle_info(
-        {:tortoise_result, ref, res},
+  def handle_cast(
+        {:report_tortoise_result, ref, res},
         %State{work_list: work_list} = state
       ) do
     {updated_work_list, work_item} = WorkList.done(work_list, ref)

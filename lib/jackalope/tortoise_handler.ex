@@ -6,14 +6,14 @@ defmodule Jackalope.TortoiseHandler do
   require Logger
 
   alias __MODULE__, as: State
+  alias Jackalope.Session
 
-  defstruct jackalope_pid: nil, handler: nil, default_last_will: nil
+  defstruct handler: nil, default_last_will: nil
 
   @impl Tortoise311.Handler
   def init(opts) do
     initial_state = %State{
       handler: Keyword.fetch!(opts, :handler),
-      jackalope_pid: Keyword.fetch!(opts, :jackalope_pid),
       default_last_will: Keyword.get(opts, :last_will)
     }
 
@@ -31,7 +31,7 @@ defmodule Jackalope.TortoiseHandler do
   @impl Tortoise311.Handler
   def connection(status, %State{} = state) do
     # inform the jackalope process about the connection status change
-    send(state.jackalope_pid, {:connection_status, status})
+    Session.report_connection_status(status)
 
     if function_exported?(state.handler, :connection, 1) do
       _ignored = apply(state.handler, :connection, [status])
