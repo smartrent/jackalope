@@ -6,9 +6,8 @@ defmodule Jackalope.TortoiseClient do
 
   use GenServer
 
-  require Logger
-
   alias Jackalope.Session
+  require Logger
 
   defmodule State do
     @moduledoc false

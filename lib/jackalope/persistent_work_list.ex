@@ -3,9 +3,10 @@ defmodule Jackalope.PersistentWorkList do
   A genserver wrapper for CubQ which we leverage to store and restore worklist tasks during disconnections
   """
   use GenServer
-  require Logger
 
   alias Jackalope.WorkList.Expiration
+
+  require Logger
 
   @default_max_size 100
 

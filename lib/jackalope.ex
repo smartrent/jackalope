@@ -1,12 +1,12 @@
 defmodule Jackalope do
-  use Supervisor
-
-  require Logger
-
   @moduledoc "README.md"
              |> File.read!()
              |> String.split("<!-- MDOC !-->")
              |> Enum.fetch!(1)
+
+  use Supervisor
+
+  require Logger
 
   @default_mqtt_server {
     Tortoise311.Transport.Tcp,

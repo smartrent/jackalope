@@ -3,10 +3,10 @@ defmodule Jackalope.TortoiseHandler do
 
   @behaviour Tortoise311.Handler
 
-  require Logger
-
   alias __MODULE__, as: State
   alias Jackalope.Session
+
+  require Logger
 
   defstruct handler: nil, default_last_will: nil
 

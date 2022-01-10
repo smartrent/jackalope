@@ -6,9 +6,9 @@ defmodule Jackalope.Handler.Logger do
   specified in the option list passed to `Jackalope.start_link/1`.
   """
 
-  require Logger
-
   @behaviour Jackalope.Handler
+
+  require Logger
 
   @impl Jackalope.Handler
   def connection(status) do
