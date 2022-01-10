@@ -33,14 +33,6 @@ defmodule JackalopeTest do
 
       assert_receive {MqttServer, :completed}, 200
     end
-
-    # test "connect to a MQTT server with initial subscribe topics (tcp)", context do
-    #   # When we connect with a initial topics list set we will expect
-    #   # a subscribe package on the server side after we connect;
-    #   connect(context, initial_topics: ["foo/bar"])
-    #   {:ok, subscribe} = expect_subscribe(context, [{"foo/bar", 1}])
-    #   :ok = acknowledge_subscribe(context, subscribe, [{:ok, 1}])
-    # end
   end
 
   describe "publish/3" do
@@ -289,31 +281,4 @@ defmodule JackalopeTest do
     {:ok, _} = MqttServer.enact(context.mqtt_server_pid, [:pause])
     Process.sleep(100)
   end
-
-  # defp expect_subscribe(context, %Package.Subscribe{} = subscribe) do
-  #   # setup the expectation that the server will receive a subscribe
-  #   # package from the client
-  #   script = [{:receive, subscribe}]
-  #   {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
-  #   assert_receive {MqttServer, {:received, package = %Package.Subscribe{}}}, 1000
-  #   assert_receive {MqttServer, :completed}
-
-  #   {:ok, package}
-  # end
-
-  # defp expect_subscribe(context, [{topic, qos} | _] = subscribe_topics)
-  #      when is_integer(qos) and is_binary(topic) do
-  #   subscribe = %Package.Subscribe{topics: subscribe_topics}
-  #   expect_subscribe(context, subscribe)
-  # end
-
-  # defp acknowledge_subscribe(context, %Package.Subscribe{identifier: id, topics: topics}, acks)
-  #      when not is_nil(id) and length(topics) == length(acks) do
-  #   suback = %Package.Suback{identifier: id, acks: acks}
-  #   script = [{:send, suback}]
-  #   {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
-  #   # expect the scripted server to dispatch the suback
-  #   assert_receive {MqttServer, :completed}
-  #   :ok
-  # end
 end
