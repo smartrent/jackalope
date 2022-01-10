@@ -19,19 +19,23 @@ defmodule JackalopeTest.ScriptedMqttServer do
   alias __MODULE__, as: State
 
   # Client API
+  @spec start_link() :: GenServer.on_start()
   def start_link() do
     start_link([])
   end
 
+  @spec start_link(Keyword.t()) :: GenServer.on_start()
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
   end
 
+  @spec enact(GenServer.server(), List.t()) :: {:ok, any()}
   def enact(pid, script) do
     GenServer.call(pid, {:enact, script})
   end
 
   # Server callbacks
+  @impl GenServer
   def init(opts) do
     transport = Keyword.get(opts, :transport, Tortoise311.Transport.Tcp)
 
@@ -58,6 +62,7 @@ defmodule JackalopeTest.ScriptedMqttServer do
     end
   end
 
+  @impl GenServer
   def handle_call({:enact, script}, {pid, _} = caller, %State{client_pid: pid} = state) do
     GenServer.reply(caller, {:ok, state.server_info})
     next_action(%State{state | script: state.script ++ script})
@@ -71,6 +76,7 @@ defmodule JackalopeTest.ScriptedMqttServer do
     next_action(%State{state | client_pid: pid, script: script, client: client})
   end
 
+  @impl GenServer
   def handle_info(
         {transport, _, data},
         %State{script: [{:receive, expected} | script]} = state
