@@ -21,7 +21,7 @@ jobs:
       - run: mix compile
       - run: mix docs
       - run: mix hex.build
-      - run: mix test || mix test
+      - run: mix test
       - run: mix format --check-formatted
       - run: mix credo --ignore-checks "refactor"
       - run: mix dialyzer
@@ -39,7 +39,7 @@ jobs:
       - <<: *install_hex_rebar
       - run: mix deps.get
       - run: mix compile
-      - run: mix test || mix test
+      - run: mix test
 
   build_elixir_1_10_otp_23:
     docker:
@@ -49,7 +49,7 @@ jobs:
       - <<: *install_hex_rebar
       - run: mix deps.get
       - run: mix compile
-      - run: mix test || mix test
+      - run: mix test
 
 workflows:
   version: 2
