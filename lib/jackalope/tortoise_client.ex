@@ -8,11 +8,12 @@ defmodule Jackalope.TortoiseClient do
 
   require Logger
 
+  alias Jackalope.Session
+
   defmodule State do
     @moduledoc false
 
     defstruct connection: nil,
-              jackalope_pid: nil,
               handler: nil,
               client_id: nil,
               connection_options: [],
@@ -72,15 +73,12 @@ defmodule Jackalope.TortoiseClient do
 
   @impl GenServer
   def init(opts) do
-    case struct(%State{jackalope_pid: Jackalope.Session.whereis()}, opts) do
+    case struct(%State{}, opts) do
       %State{client_id: nil} ->
         {:stop, :missing_client_id}
 
       %State{handler: nil} ->
         {:stop, :missing_handler}
-
-      %State{jackalope_pid: pid} when not is_pid(pid) ->
-        {:stop, :missing_jackalope_process}
 
       %State{} = initial_state ->
         {:ok, initial_state, {:continue, :spawn_connection}}
@@ -94,7 +92,6 @@ defmodule Jackalope.TortoiseClient do
     # fully up once we got the process
     handler_opts = [
       handler: state.handler,
-      jackalope_pid: state.jackalope_pid,
       last_will: state.last_will
     ]
 
@@ -197,7 +194,8 @@ defmodule Jackalope.TortoiseClient do
         {{Tortoise311, _client_id}, reference, result},
         %State{} = state
       ) do
-    send(state.jackalope_pid, {:tortoise_result, reference, result})
+    Session.report_tortoise_result(reference, result)
+
     {:noreply, state}
   end
 
