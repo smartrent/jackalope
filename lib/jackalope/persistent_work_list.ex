@@ -242,7 +242,7 @@ defmodule Jackalope.PersistentWorkList do
             Expiration.after?(state.expiration_fn.(item2), state.expiration_fn.(item1))
           end)
 
-        Logger.warn(
+        Logger.info(
           "[Jackalope] Maximum number of unexpired pending requests reached. Dropping #{inspect(item)}:#{inspect(ref)}."
         )
 
