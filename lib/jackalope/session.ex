@@ -39,6 +39,7 @@ defmodule Jackalope.Session do
 
   ## MQTT-ing
   @doc false
+  @spec publish(String.t(), any(), keyword) :: :ok | {:error, :invalid_qos | :invalid_ttl}
   def publish(topic, payload, opts) when is_binary(topic) do
     publish_opts = Keyword.take(opts, @publish_options)
     work_list_options = Keyword.take(opts, @work_list_options)
@@ -58,6 +59,7 @@ defmodule Jackalope.Session do
   end
 
   @doc false
+  @spec status() :: map()
   def status() do
     GenServer.call(__MODULE__, :status)
   end
