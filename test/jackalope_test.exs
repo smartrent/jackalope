@@ -7,8 +7,6 @@ defmodule JackalopeTest do
   alias JackalopeTest.ScriptedMqttServer, as: MqttServer
   alias Tortoise311.Package
 
-  @work_list_mod Jackalope.PersistentWorkList
-
   setup context do
     {:ok, mqtt_server_pid} = start_supervised(MqttServer)
     Process.link(mqtt_server_pid)
@@ -25,7 +23,6 @@ defmodule JackalopeTest do
                  server: transport,
                  client_id: context.client_id,
                  handler: JackalopeTest.TestHandler,
-                 work_list_mod: @work_list_mod,
                  data_dir: "/tmp"
                )
 
@@ -222,7 +219,6 @@ defmodule JackalopeTest do
          handler: handler,
          initial_topics: initial_topics,
          max_work_list_size: max_work_list_size,
-         work_list_mod: @work_list_mod,
          data_dir: "/tmp"
        ]}
     )
