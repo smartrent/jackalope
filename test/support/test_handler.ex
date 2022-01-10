@@ -3,33 +3,36 @@ defmodule JackalopeTest.TestHandler do
 
   @behaviour Jackalope.Handler
 
+  require Logger
+
+  defp label(%Macro.Env{module: module, function: {function, _arity}} = _env) do
+    "#{module}.#{function}"
+  end
+
   @impl Jackalope.Handler
   def connection(status) do
-    IO.inspect(status, label: __MODULE__.CONNECTION)
-    :ok
+    Logger.debug("#{label(__ENV__)}: #{inspect(status)}")
   end
 
   @impl Jackalope.Handler
   def handle_message(topic, payload) do
-    IO.inspect({topic, payload}, label: __MODULE__.HANDLE_MESSAGE)
-    :ok
+    Logger.debug("#{label(__ENV__)}: #{inspect({topic, payload})}")
   end
 
   @impl Jackalope.Handler
   def subscription(status, topic) do
-    IO.inspect({status, topic}, label: __MODULE__.HANDLE_ERROR)
-    :ok
+    Logger.debug("#{label(__ENV__)}: #{inspect({status, topic})}")
   end
 
   @impl Jackalope.Handler
   def handle_error(error) do
-    IO.inspect(error, label: __MODULE__.HANDLE_ERROR)
-    :ok
+    Logger.debug("#{label(__ENV__)}: #{inspect(error)}")
   end
 
   @impl Jackalope.Handler
   def last_will() do
-    IO.inspect("No update to last will", label: __MODULE__.LAST_WILL)
+    Logger.debug("#{label(__ENV__)}: No update to last will")
+
     nil
   end
 end
