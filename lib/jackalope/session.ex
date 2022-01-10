@@ -12,10 +12,10 @@ defmodule Jackalope.Session do
 
   use GenServer
 
-  require Logger
-
   alias __MODULE__, as: State
   alias Jackalope.{TortoiseClient, WorkList}
+
+  require Logger
 
   @publish_options [:qos, :retain]
   @work_list_options [:ttl]

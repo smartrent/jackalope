@@ -4,8 +4,10 @@ defmodule Jackalope.Supervisor do
   # Supervisor for the MQTT connection specific processes
 
   use Supervisor
-  require Logger
+
   alias Jackalope.TortoiseClient
+
+  require Logger
 
   @type init_arg ::
           {:app_handler, module()} | {:client_id, atom()} | {:connection_options, Keyword.t()}
