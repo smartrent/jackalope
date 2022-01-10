@@ -2,9 +2,9 @@ defmodule JackalopeTest do
   use ExUnit.Case, async: false
   doctest Jackalope
 
-  alias JackalopeTest.ScriptedMqttServer, as: MqttServer
   alias Jackalope.WorkList
   alias Jackalope.WorkList.Expiration
+  alias JackalopeTest.ScriptedMqttServer, as: MqttServer
   alias Tortoise311.Package
 
   @work_list_mod Jackalope.PersistentWorkList

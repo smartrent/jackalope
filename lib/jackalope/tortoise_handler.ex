@@ -22,7 +22,7 @@ defmodule Jackalope.TortoiseHandler do
 
   @impl Tortoise311.Handler
   def last_will(%State{} = state) do
-    last_will = apply(state.handler, :last_will, []) || state.default_last_will
+    last_will = state.handler.last_will() || state.default_last_will
     packaged_last_will = package_last_will(last_will)
 
     {{:ok, packaged_last_will}, state}
@@ -34,7 +34,7 @@ defmodule Jackalope.TortoiseHandler do
     Session.report_connection_status(status)
 
     if function_exported?(state.handler, :connection, 1) do
-      _ignored = apply(state.handler, :connection, [status])
+      _ignored = state.handler.connection(status)
     end
 
     {:ok, state}
@@ -43,7 +43,7 @@ defmodule Jackalope.TortoiseHandler do
   @impl Tortoise311.Handler
   def subscription(status, topic_filter, %State{} = state) when status in [:up, :down] do
     if function_exported?(state.handler, :subscription, 2) do
-      _ignored = apply(state.handler, :subscription, [status, topic_filter])
+      _ignored = state.handler.subscription(status, topic_filter)
     end
 
     {:ok, state}
@@ -54,7 +54,7 @@ defmodule Jackalope.TortoiseHandler do
     case Jason.decode(payload_string) do
       {:ok, payload} ->
         # Dispatch to the handle message callback on the jackalope handler
-        apply(handler, :handle_message, [topic_levels, payload])
+        handler.handle_message(topic_levels, payload)
         {:ok, state}
 
       {:error, reason} ->
@@ -62,7 +62,7 @@ defmodule Jackalope.TortoiseHandler do
         # implemented
         if function_exported?(handler, :handle_error, 1) do
           reason = {:payload_decode_error, reason, {topic_levels, payload_string}}
-          apply(handler, :handle_error, [reason])
+          handler.handle_error(reason)
         end
 
         {:ok, state}

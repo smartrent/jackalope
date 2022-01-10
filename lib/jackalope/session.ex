@@ -191,7 +191,7 @@ defmodule Jackalope.Session do
           # drop the message, it is outside of the time to live
           if function_exported?(state.handler, :handle_error, 1) do
             reason = {:publish_error, cmd, :ttl_expired}
-            apply(state.handler, :handle_error, [reason])
+            state.handler.handle_error(reason)
           end
 
           {:noreply, state, {:continue, :consume_work_list}}
