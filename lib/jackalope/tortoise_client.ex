@@ -213,7 +213,7 @@ defmodule Jackalope.TortoiseClient do
       {:error, reason} ->
         if function_exported?(state.handler, :handle_error, 1) do
           reason = {:publish_error, {topic, payload, opts}, reason}
-          apply(state.handler, :handle_error, [reason])
+          state.handler.handle_error(reason)
         end
 
         {:error, reason}
