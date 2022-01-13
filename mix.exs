@@ -35,8 +35,8 @@ defmodule Jackalope.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps() do
     [
-      {:tortoise311, "~> 0.11.0"},
-      # {:tortoise311, git: "git@github.com:smartrent/tortoise311.git", branch: "main"},
+      # {:tortoise311, "~> 0.11.0"},
+      {:tortoise311, git: "git@github.com:smartrent/tortoise311.git", branch: "with_telemetry"},
       {:jason, "~> 1.1"},
       {:dialyxir, "~> 1.1.0", only: [:test, :dev], runtime: false},
       {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
