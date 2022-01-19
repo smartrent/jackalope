@@ -7,8 +7,6 @@ defmodule JackalopeTest do
   alias JackalopeTest.ScriptedMqttServer, as: MqttServer
   alias Tortoise311.Package
 
-  @work_list_mod Jackalope.PersistentWorkList
-
   setup context do
     {:ok, mqtt_server_pid} = start_supervised(MqttServer)
     Process.link(mqtt_server_pid)
@@ -25,7 +23,7 @@ defmodule JackalopeTest do
                  server: transport,
                  client_id: context.client_id,
                  handler: JackalopeTest.TestHandler,
-                 work_list_mod: @work_list_mod,
+                 work_list_mod: Jackalope.TransientWorkList,
                  data_dir: "/tmp"
                )
 
@@ -40,7 +38,7 @@ defmodule JackalopeTest do
 
   describe "publish/3" do
     test "publish with QoS=0", context do
-      connect(context)
+      connect(context, work_list_mod: Jackalope.TransientWorkList)
 
       flush =
         expect_publish(
@@ -57,7 +55,7 @@ defmodule JackalopeTest do
     end
 
     test "publish with QoS=1", context do
-      connect(context)
+      connect(context, work_list_mod: Jackalope.TransientWorkList)
 
       flush =
         expect_publish(
@@ -80,91 +78,93 @@ defmodule JackalopeTest do
   end
 
   describe "work list" do
-    test "dropping work orders", context do
-      connect(context, max_work_list_size: 10)
-      pause_mqtt_server(context)
+    for work_list_mod <- [Jackalope.PersistentWorkList, Jackalope.TransientWorkList] do
+      test "#{work_list_mod}: dropping work orders", context do
+        connect(context, work_list_mod: unquote(work_list_mod), max_work_list_size: 10)
+        pause_mqtt_server(context)
 
-      work_list = get_session_work_list()
+        work_list = get_session_work_list()
 
-      work_list =
-        Enum.reduce(1..15, work_list, fn i, acc ->
-          WorkList.push(
-            acc,
-            {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
-             [expiration: Expiration.expiration(:infinity)]}
-          )
-        end)
+        work_list =
+          Enum.reduce(1..15, work_list, fn i, acc ->
+            WorkList.push(
+              acc,
+              {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
+               [expiration: Expiration.expiration(:infinity)]}
+            )
+          end)
 
-      assert WorkList.count(work_list) == 10
-    end
+        assert WorkList.count(work_list) == 10
+      end
 
-    test "pending and done work items", context do
-      connect(context, max_work_list_size: 10)
-      pause_mqtt_server(context)
+      test "#{work_list_mod}: pending and done work items", context do
+        connect(context, work_list_mod: unquote(work_list_mod), max_work_list_size: 10)
+        pause_mqtt_server(context)
 
-      work_list = get_session_work_list()
+        work_list = get_session_work_list()
 
-      work_list =
-        Enum.reduce(1..5, work_list, fn i, acc ->
-          WorkList.push(
-            acc,
-            {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
-             [expiration: Expiration.expiration(:infinity)]}
-          )
-        end)
+        work_list =
+          Enum.reduce(1..5, work_list, fn i, acc ->
+            WorkList.push(
+              acc,
+              {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
+               [expiration: Expiration.expiration(:infinity)]}
+            )
+          end)
 
-      assert WorkList.count(work_list) == 5
+        assert WorkList.count(work_list) == 5
 
-      ref = make_ref()
+        ref = make_ref()
 
-      {work_list, _item} =
-        work_list
-        |> WorkList.pending(ref)
-        |> WorkList.done(ref)
+        {work_list, _item} =
+          work_list
+          |> WorkList.pending(ref)
+          |> WorkList.done(ref)
 
-      assert WorkList.count(work_list) == 4
-    end
+        assert WorkList.count(work_list) == 4
+      end
 
-    test "dropping pending work items", context do
-      connect(context, max_work_list_size: 10)
-      pause_mqtt_server(context)
+      test "#{work_list_mod}: dropping pending work items", context do
+        connect(context, work_list_mod: unquote(work_list_mod), max_work_list_size: 10)
+        pause_mqtt_server(context)
 
-      work_list = get_session_work_list()
+        work_list = get_session_work_list()
 
-      work_list =
-        Enum.reduce(1..15, work_list, fn i, acc ->
-          WorkList.push(
-            acc,
-            {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
-             [expiration: Expiration.expiration(:infinity)]}
-          )
-          |> WorkList.pending(make_ref())
-        end)
+        work_list =
+          Enum.reduce(1..15, work_list, fn i, acc ->
+            WorkList.push(
+              acc,
+              {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
+               [expiration: Expiration.expiration(:infinity)]}
+            )
+            |> WorkList.pending(make_ref())
+          end)
 
-      assert WorkList.count_pending(work_list) == 10
-    end
+        assert WorkList.count_pending(work_list) == 10
+      end
 
-    test "reset_pending work items", context do
-      connect(context, max_work_list_size: 10)
-      pause_mqtt_server(context)
+      test "#{work_list_mod}: reset_pending work items", context do
+        connect(context, work_list_mod: unquote(work_list_mod), max_work_list_size: 10)
+        pause_mqtt_server(context)
 
-      work_list = get_session_work_list()
+        work_list = get_session_work_list()
 
-      work_list =
-        Enum.reduce(1..5, work_list, fn i, acc ->
-          WorkList.push(
-            acc,
-            {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
-             [expiration: Expiration.expiration(:infinity)]}
-          )
-        end)
+        work_list =
+          Enum.reduce(1..5, work_list, fn i, acc ->
+            WorkList.push(
+              acc,
+              {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
+               [expiration: Expiration.expiration(:infinity)]}
+            )
+          end)
 
-      ref = make_ref()
+        ref = make_ref()
 
-      work_list = WorkList.pending(work_list, ref)
-      assert WorkList.count(work_list) == 4
-      work_list = WorkList.reset_pending(work_list)
-      assert WorkList.count(work_list) == 5
+        work_list = WorkList.pending(work_list, ref)
+        assert WorkList.count(work_list) == 4
+        work_list = WorkList.reset_pending(work_list)
+        assert WorkList.count(work_list) == 5
+      end
     end
 
     test "rebasing expiration" do
@@ -205,6 +205,7 @@ defmodule JackalopeTest do
     handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
     initial_topics = Keyword.get(opts, :initial_topics)
     max_work_list_size = Keyword.get(opts, :max_work_list_size, 100)
+    work_list_mod = Keyword.fetch!(opts, :work_list_mod)
 
     start_supervised!(
       {Jackalope,
@@ -214,7 +215,7 @@ defmodule JackalopeTest do
          handler: handler,
          initial_topics: initial_topics,
          max_work_list_size: max_work_list_size,
-         work_list_mod: @work_list_mod,
+         work_list_mod: work_list_mod,
          data_dir: "/tmp"
        ]}
     )
