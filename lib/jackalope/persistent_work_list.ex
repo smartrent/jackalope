@@ -22,23 +22,15 @@ defmodule Jackalope.PersistentWorkList do
   end
 
   @doc "Create a new work list"
-  @spec new(function(), function(), non_neg_integer(), Keyword.t()) :: pid()
-  def new(expiration_fn, update_expiration_fn, max_size \\ @default_max_size, opts \\ []) do
-    args = [
-      expiration_fn: expiration_fn,
-      update_expiration_fn: update_expiration_fn,
-      max_size: max_size,
-      opts: opts
-    ]
-
+  @spec new(Keyword.t()) :: pid()
+  def new(opts) do
     Logger.info("[Jackalope] Starting #{__MODULE__} with #{inspect(opts)}")
-    {:ok, pid} = GenServer.start_link(__MODULE__, args)
+    {:ok, pid} = GenServer.start_link(__MODULE__, opts)
     pid
   end
 
   @impl GenServer
-  def init(args) do
-    opts = Keyword.fetch!(args, :opts)
+  def init(opts) do
     {db, queue} = start_queue(opts)
     send(self(), :tick)
 
@@ -46,9 +38,9 @@ defmodule Jackalope.PersistentWorkList do
      %State{
        db: db,
        queue: queue,
-       max_work_list_size: Keyword.fetch!(args, :max_size),
-       expiration_fn: Keyword.fetch!(args, :expiration_fn),
-       update_expiration_fn: Keyword.fetch!(args, :update_expiration_fn)
+       max_work_list_size: Keyword.get(opts, :max_size, @default_max_size),
+       expiration_fn: Keyword.fetch!(opts, :expiration_fn),
+       update_expiration_fn: Keyword.fetch!(opts, :update_expiration_fn)
      }, {:continue, :recover}}
   end
 
