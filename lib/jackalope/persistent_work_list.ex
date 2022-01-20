@@ -16,7 +16,6 @@ defmodule Jackalope.PersistentWorkList do
     @moduledoc false
     defstruct db: nil,
               queue: nil,
-              queue_name: nil,
               max_work_list_size: nil,
               expiration_fn: nil,
               update_expiration_fn: nil
@@ -41,7 +40,6 @@ defmodule Jackalope.PersistentWorkList do
   def init(args) do
     opts = Keyword.fetch!(args, :opts)
     data_dir = Keyword.get(opts, :data_dir, "/data/jackalope")
-    queue_name = Keyword.get(opts, :queue_name, :items)
 
     db =
       case CubDB.start_link(data_dir: data_dir, name: :work_list, auto_compact: true) do
@@ -60,7 +58,7 @@ defmodule Jackalope.PersistentWorkList do
     CubDB.set_auto_file_sync(db, true)
 
     queue =
-      case CubQ.start_link(db: db, queue: queue_name) do
+      case CubQ.start_link(db: db, queue: :items) do
         {:ok, pid} ->
           pid
 
@@ -79,7 +77,6 @@ defmodule Jackalope.PersistentWorkList do
      %State{
        db: db,
        queue: queue,
-       queue_name: queue_name,
        max_work_list_size: Keyword.fetch!(args, :max_size),
        expiration_fn: Keyword.fetch!(args, :expiration_fn),
        update_expiration_fn: Keyword.fetch!(args, :update_expiration_fn)
