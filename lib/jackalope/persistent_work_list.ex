@@ -39,37 +39,7 @@ defmodule Jackalope.PersistentWorkList do
   @impl GenServer
   def init(args) do
     opts = Keyword.fetch!(args, :opts)
-    data_dir = Keyword.get(opts, :data_dir, "/data/jackalope")
-
-    cubdb_opts = [data_dir: data_dir, name: :work_list, auto_compact: true]
-
-    {:ok, db} =
-      case CubDB.start_link(cubdb_opts) do
-        {:error, reason} ->
-          Logger.warn("[Jackalope] Corrupted DB : #{inspect(reason)}. Erasing it.")
-          _ = File.rmdir(data_dir)
-          CubDB.start_link(cubdb_opts)
-
-        success ->
-          success
-      end
-
-    CubDB.set_auto_file_sync(db, true)
-
-    queue =
-      case CubQ.start_link(db: db, queue: :items) do
-        {:ok, pid} ->
-          pid
-
-        {:error, {:already_started, pid}} ->
-          pid
-
-        other ->
-          Logger.warn("[Jackalope] Corrupted queue : #{inspect(other)}. Erasing DB.")
-          _ = File.rmdir(data_dir)
-          raise "Corrupted work list queue"
-      end
-
+    {db, queue} = start_queue(opts)
     send(self(), :tick)
 
     {:ok,
@@ -159,6 +129,41 @@ defmodule Jackalope.PersistentWorkList do
   @impl GenServer
   def terminate(_reason, state) do
     record_time_now(state)
+  end
+
+  defp start_queue(opts) do
+    data_dir = Keyword.get(opts, :data_dir, "/data/jackalope")
+
+    cubdb_opts = [data_dir: data_dir, name: :work_list, auto_compact: true]
+
+    {:ok, db} =
+      case CubDB.start_link(cubdb_opts) do
+        {:error, reason} ->
+          Logger.warn("[Jackalope] Corrupted DB : #{inspect(reason)}. Erasing it.")
+          _ = File.rmdir(data_dir)
+          CubDB.start_link(cubdb_opts)
+
+        success ->
+          success
+      end
+
+    CubDB.set_auto_file_sync(db, true)
+
+    queue =
+      case CubQ.start_link(db: db, queue: :items) do
+        {:ok, pid} ->
+          pid
+
+        {:error, {:already_started, pid}} ->
+          pid
+
+        other ->
+          Logger.warn("[Jackalope] Corrupted queue : #{inspect(other)}. Erasing DB.")
+          _ = File.rmdir(data_dir)
+          raise "Corrupted work list queue"
+      end
+
+    {db, queue}
   end
 
   defp add_pending(state, item, ref) do
