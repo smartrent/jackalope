@@ -109,9 +109,8 @@ defmodule Jackalope.PersistentWorkList do
   end
 
   def handle_call(:reset_pending, _from, state) do
-    pending_items = pending_items(state)
-
-    :ok = Enum.each(pending_items, &(:ok = CubQ.push(state.queue, &1)))
+    :ok =
+      Enum.each(get_pending(state), fn {_ref, value} -> :ok = CubQ.push(state.queue, value) end)
 
     :ok = update_pending(state, %{})
 
@@ -163,8 +162,6 @@ defmodule Jackalope.PersistentWorkList do
 
     :ok = update_pending(state, updated_pending)
   end
-
-  defp pending_items(state), do: get_pending(state) |> Map.values()
 
   defp bound_work_items(state) do
     max = state.max_size
@@ -284,12 +281,13 @@ defmodule Jackalope.PersistentWorkList do
     end
 
     # Convert pending items into waiting items with rebased expirations
-
-    pending_items(state)
-    |> Enum.each(fn pending_item ->
-      expiration = Expiration.rebase_expiration(expiration_fn.(pending_item), latest_time, now)
-      :ok = CubQ.enqueue(state.queue, update_expiration_fn.(pending_item, expiration))
-    end)
+    Enum.each(
+      get_pending(state),
+      fn {_ref, pending_item} ->
+        expiration = Expiration.rebase_expiration(expiration_fn.(pending_item), latest_time, now)
+        :ok = CubQ.enqueue(state.queue, update_expiration_fn.(pending_item, expiration))
+      end
+    )
   end
 end
 
