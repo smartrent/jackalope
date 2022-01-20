@@ -78,7 +78,10 @@ defmodule Jackalope do
   - `work_list_mod` names the module implementing the Jackalope WorkList protocol that will be used to manage
      the publish commands sent to Tortoise by the Jackalope Session.
      The module must also implement the function `@spec new(function(), function(), non_neg_integer(), Keyword.t()) :: any()`.
-     See Jackalope.TransientWorkList (the default) for examples.
+     See Jackalope.TransientWorkList (the default) and Jackalope.PersistentWorkList for examples.
+
+  - `data_dir` (defaults to the Nerves-friendly "/data/jackalope") is the directory used by PersistentWorkList
+     (if used) to persist the waiting-to-be-sent and pending-confirmation publish commands.
 
   - `max_work_list_size` (default: #{@default_max_work_list_size}) specifies the maximum
     number of unexpired work orders Jackalope will retain in its work list
@@ -126,7 +129,8 @@ defmodule Jackalope do
        [
          handler: jackalope_handler,
          max_work_list_size: max_work_list_size,
-         work_list_mod: work_list_mod
+         work_list_mod: work_list_mod,
+         data_dir: Keyword.get(opts, :data_dir)
        ]},
       {Jackalope.Supervisor,
        [

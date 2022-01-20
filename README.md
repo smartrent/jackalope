@@ -61,6 +61,9 @@ to discarded when confirmed by Tortoise311 as processed or when they are expired
 The work list has a maximum size which defaults to 100. Only a maximum number of publish commands
 can wait, should Tortoise311 be temporarily disconnected, to be forwarded to Tortoise311.
 
+The waiting and pending publish commands can survive a reboot but only if the persistent work list
+implementation is used. The default is the transient work list implementation.
+
 You can set the Jackalope.start_link/1 `:work_list_mod` option to the desired work list implementation.
 See the documentation for module `Jackalope`.
 
