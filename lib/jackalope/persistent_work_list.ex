@@ -16,7 +16,7 @@ defmodule Jackalope.PersistentWorkList do
     @moduledoc false
     defstruct db: nil,
               queue: nil,
-              max_work_list_size: nil,
+              max_size: nil,
               expiration_fn: nil,
               update_expiration_fn: nil
   end
@@ -38,7 +38,7 @@ defmodule Jackalope.PersistentWorkList do
      %State{
        db: db,
        queue: queue,
-       max_work_list_size: Keyword.get(opts, :max_size, @default_max_size),
+       max_size: Keyword.get(opts, :max_size, @default_max_size),
        expiration_fn: Keyword.fetch!(opts, :expiration_fn),
        update_expiration_fn: Keyword.fetch!(opts, :update_expiration_fn)
      }, {:continue, :recover}}
@@ -167,7 +167,7 @@ defmodule Jackalope.PersistentWorkList do
   defp pending_items(state), do: get_pending(state) |> Map.values()
 
   defp bound_work_items(state) do
-    max = state.max_work_list_size
+    max = state.max_size
 
     if queue_size(state) > max do
       :ok = remove_expired_work_items(state)
@@ -213,7 +213,7 @@ defmodule Jackalope.PersistentWorkList do
 
   # Trim pending as needed to accommodate an additional pending item
   defp bound_pending_items(pending, state) do
-    if map_size(pending) > state.max_work_list_size do
+    if map_size(pending) > state.max_size do
       # Trim expired pending requests
       kept_pairs =
         Enum.reduce(
@@ -229,7 +229,7 @@ defmodule Jackalope.PersistentWorkList do
         )
 
       # If still over maximum, remove the oldest pending request (expiration is smallest)
-      if length(kept_pairs) > state.max_work_list_size do
+      if length(kept_pairs) > state.max_size do
         [{ref, item} | newer_pairs] =
           Enum.sort(kept_pairs, fn {_, item1}, {_, item2} ->
             Expiration.after?(state.expiration_fn.(item2), state.expiration_fn.(item1))
