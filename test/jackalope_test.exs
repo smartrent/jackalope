@@ -199,7 +199,7 @@ defmodule JackalopeTest do
     {Tortoise311.Transport.Tcp, [host: ip, port: port]}
   end
 
-  defp connect(%{client_id: client_id} = context, opts \\ []) do
+  defp connect(%{client_id: client_id} = context, opts) do
     transport = setup_server(context)
 
     handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
