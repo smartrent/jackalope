@@ -59,12 +59,9 @@ defmodule Jackalope.PersistentWorkList do
   end
 
   @impl GenServer
-  def handle_call(:count, _from, state) do
-    {:reply, queue_size(state), state}
-  end
-
-  def handle_call(:count_pending, _from, state) do
-    {:reply, Enum.count(get_pending(state)), state}
+  def handle_call(:info, _from, state) do
+    info = %{count: queue_size(state), pending_count: Enum.count(get_pending(state))}
+    {:reply, info, state}
   end
 
   def handle_call(:peek, _from, state) do
@@ -328,17 +325,9 @@ defimpl Jackalope.WorkList, for: PID do
   end
 
   @impl Jackalope.WorkList
-  def count(work_list) do
-    GenServer.call(work_list, :count)
+  def info(work_list) do
+    GenServer.call(work_list, :info)
   end
-
-  @impl Jackalope.WorkList
-  def count_pending(work_list) do
-    GenServer.call(work_list, :count_pending)
-  end
-
-  @impl Jackalope.WorkList
-  def empty?(work_list), do: peek(work_list) == nil
 
   @impl Jackalope.WorkList
   def remove_all(work_list) do

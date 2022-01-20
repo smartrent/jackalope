@@ -169,18 +169,8 @@ defimpl Jackalope.WorkList, for: Jackalope.TransientWorkList do
   end
 
   @impl Jackalope.WorkList
-  def count(work_list) do
-    length(work_list.items)
-  end
-
-  @impl Jackalope.WorkList
-  def count_pending(work_list) do
-    Enum.count(work_list.pending)
-  end
-
-  @impl Jackalope.WorkList
-  def empty?(work_list) do
-    work_list.items == []
+  def info(work_list) do
+    %{count: length(work_list.items), pending_count: Enum.count(work_list.pending)}
   end
 
   @impl Jackalope.WorkList

@@ -94,7 +94,7 @@ defmodule JackalopeTest do
             )
           end)
 
-        assert WorkList.count(work_list) == 10
+        assert WorkList.info(work_list).count == 10
       end
 
       test "#{work_list_mod}: pending and done work items", context do
@@ -112,7 +112,7 @@ defmodule JackalopeTest do
             )
           end)
 
-        assert WorkList.count(work_list) == 5
+        assert WorkList.info(work_list).count == 5
 
         ref = make_ref()
 
@@ -121,7 +121,7 @@ defmodule JackalopeTest do
           |> WorkList.pending(ref)
           |> WorkList.done(ref)
 
-        assert WorkList.count(work_list) == 4
+        assert WorkList.info(work_list).count == 4
       end
 
       test "#{work_list_mod}: dropping pending work items", context do
@@ -140,7 +140,7 @@ defmodule JackalopeTest do
             |> WorkList.pending(make_ref())
           end)
 
-        assert WorkList.count_pending(work_list) == 10
+        assert WorkList.info(work_list).pending_count == 10
       end
 
       test "#{work_list_mod}: reset_pending work items", context do
@@ -161,9 +161,9 @@ defmodule JackalopeTest do
         ref = make_ref()
 
         work_list = WorkList.pending(work_list, ref)
-        assert WorkList.count(work_list) == 4
+        assert WorkList.info(work_list).count == 4
         work_list = WorkList.reset_pending(work_list)
-        assert WorkList.count(work_list) == 5
+        assert WorkList.info(work_list).count == 5
       end
     end
 
@@ -225,7 +225,7 @@ defmodule JackalopeTest do
 
     work_list = get_session_work_list()
     WorkList.remove_all(work_list)
-    assert WorkList.empty?(work_list)
+    assert WorkList.info(work_list).count == 0
   end
 
   defp expect_publish(context, %Package.Publish{qos: 0} = publish) do
