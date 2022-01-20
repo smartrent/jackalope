@@ -41,18 +41,17 @@ defmodule Jackalope.PersistentWorkList do
     opts = Keyword.fetch!(args, :opts)
     data_dir = Keyword.get(opts, :data_dir, "/data/jackalope")
 
-    db =
-      case CubDB.start_link(data_dir: data_dir, name: :work_list, auto_compact: true) do
-        {:ok, pid} ->
-          pid
+    cubdb_opts = [data_dir: data_dir, name: :work_list, auto_compact: true]
 
-        {:error, {:already_started, pid}} ->
-          pid
-
-        other ->
-          Logger.warn("[Jackalope] Corrupted DB : #{inspect(other)}. Erasing it.")
+    {:ok, db} =
+      case CubDB.start_link(cubdb_opts) do
+        {:error, reason} ->
+          Logger.warn("[Jackalope] Corrupted DB : #{inspect(reason)}. Erasing it.")
           _ = File.rmdir(data_dir)
-          raise "Corrupted work list DB"
+          CubDB.start_link(cubdb_opts)
+
+        success ->
+          success
       end
 
     CubDB.set_auto_file_sync(db, true)
