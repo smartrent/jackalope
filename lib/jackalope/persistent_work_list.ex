@@ -203,7 +203,7 @@ defmodule Jackalope.PersistentWorkList do
     Enum.each(
       1..queue_size(state),
       fn _i ->
-        # remove from begining
+        # remove from beginning
         {:ok, item} = CubQ.dequeue(state.queue)
 
         if Expiration.unexpired?(item, state.expiration_fn) do
@@ -218,7 +218,7 @@ defmodule Jackalope.PersistentWorkList do
     )
   end
 
-  # Trim pending as needed to accomodate an additional pending item
+  # Trim pending as needed to accommodate an additional pending item
   defp bound_pending_items(pending, state) do
     if map_size(pending) > state.max_work_list_size do
       # Trim expired pending requests
