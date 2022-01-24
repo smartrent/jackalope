@@ -7,7 +7,7 @@ defmodule JackalopeTest do
   alias JackalopeTest.ScriptedMqttServer, as: MqttServer
   alias Tortoise311.Package
 
-  @work_list_mod Jackalope.TransientWorkList
+  @work_list_mod Jackalope.PersistentWorkList
 
   setup context do
     {:ok, mqtt_server_pid} = start_supervised(MqttServer)
@@ -25,7 +25,8 @@ defmodule JackalopeTest do
                  server: transport,
                  client_id: context.client_id,
                  handler: JackalopeTest.TestHandler,
-                 work_list_mod: @work_list_mod
+                 work_list_mod: @work_list_mod,
+                 data_dir: "/tmp/jackalope"
                )
 
       assert_receive {MqttServer, {:received, %Package.Connect{}}}
@@ -124,7 +125,7 @@ defmodule JackalopeTest do
       assert WorkList.count(work_list) == 4
     end
 
-    test "dropping pending work items", context do
+    test "dropping work items", context do
       connect(context, max_work_list_size: 10)
       pause_mqtt_server(context)
 
@@ -137,10 +138,9 @@ defmodule JackalopeTest do
             {{:publish, "foo", "{\"msg\": \"hello #{i}\"}", [qos: 1]},
              [expiration: Expiration.expiration(:infinity)]}
           )
-          |> WorkList.pending(make_ref())
         end)
 
-      assert WorkList.count_pending(work_list) == 10
+      assert WorkList.count(work_list) == 10
     end
 
     test "reset_pending work items", context do
@@ -179,6 +179,43 @@ defmodule JackalopeTest do
       assert ttl1 == restart_time + 90
       assert ttl2 <= restart_time + 190
     end
+
+    if @work_list_mod == Jackalope.PersistentWorkList do
+      test "recovering" do
+        work_list =
+          @work_list_mod.new(
+            fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
+            fn {cmd, opts}, expiration -> {cmd, Keyword.put(opts, :expiration, expiration)} end,
+            10,
+            data_dir: "/tmp/jackalope"
+          )
+
+        work_list = WorkList.remove_all(work_list)
+
+        work_list =
+          Enum.reduce(1..15, work_list, fn i, acc ->
+            WorkList.push(
+              acc,
+              {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
+               [expiration: Expiration.expiration(1_000)]}
+            )
+          end)
+
+        ref = make_ref()
+        work_list = WorkList.pending(work_list, ref)
+        :ok = GenServer.stop(work_list, :normal)
+
+        work_list =
+          @work_list_mod.new(
+            fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
+            fn {cmd, opts}, expiration -> {cmd, Keyword.put(opts, :expiration, expiration)} end,
+            5,
+            data_dir: "/tmp/jackalope"
+          )
+
+        assert WorkList.count(work_list) == 5
+      end
+    end
   end
 
   # Apologies for the mess after this point; these are helpers that
@@ -204,6 +241,7 @@ defmodule JackalopeTest do
     handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
     initial_topics = Keyword.get(opts, :initial_topics)
     max_work_list_size = Keyword.get(opts, :max_work_list_size, 100)
+    reset? = Keyword.get(opts, :reset, true)
 
     start_supervised!(
       {Jackalope,
@@ -213,7 +251,8 @@ defmodule JackalopeTest do
          handler: handler,
          initial_topics: initial_topics,
          max_work_list_size: max_work_list_size,
-         work_list_mod: @work_list_mod
+         work_list_mod: @work_list_mod,
+         data_dir: "/tmp/jackalope"
        ]}
     )
 
@@ -221,8 +260,11 @@ defmodule JackalopeTest do
     assert_receive {MqttServer, :completed}
 
     work_list = get_session_work_list()
-    WorkList.remove_all(work_list)
-    assert WorkList.empty?(work_list)
+
+    if reset? do
+      WorkList.remove_all(work_list)
+      assert WorkList.empty?(work_list)
+    end
   end
 
   defp expect_publish(context, %Package.Publish{qos: 0} = publish) do
