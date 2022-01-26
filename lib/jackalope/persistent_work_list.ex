@@ -9,7 +9,6 @@ defmodule Jackalope.PersistentWorkList do
 
   require Logger
 
-  @default_max_size 100
   @tick_delay 10 * 60 * 1_000
 
   defmodule State do
@@ -49,18 +48,10 @@ defmodule Jackalope.PersistentWorkList do
   end
 
   @doc "Create a new work list"
-  @spec new(function(), function(), non_neg_integer(), Keyword.t()) :: pid()
-  # TODO - make it a single opts argument
-  def new(expiration_fn, update_expiration_fn, max_size \\ @default_max_size, opts \\ []) do
-    options =
-      Keyword.merge(opts,
-        expiration_fn: expiration_fn,
-        update_expiration_fn: update_expiration_fn,
-        max_size: max_size
-      )
-
+  @spec new(Keyword.t()) :: pid()
+  def new(opts \\ []) do
     Logger.info("[Jackalope] Starting #{__MODULE__} with #{inspect(opts)}")
-    {:ok, pid} = GenServer.start_link(__MODULE__, options)
+    {:ok, pid} = GenServer.start_link(__MODULE__, opts)
     pid
   end
 

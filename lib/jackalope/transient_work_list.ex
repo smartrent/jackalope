@@ -16,10 +16,12 @@ defmodule Jackalope.TransientWorkList do
   @type t() :: %__MODULE__{items: list(), max_size: non_neg_integer()}
 
   @doc "Create a new work list"
-  @spec new(function(), function(), non_neg_integer(), Keyword.t()) :: t()
-  def new(expiration_fn, _update_expiration_fn, max_size \\ @default_max_size, _opts \\ [])
-      when max_size > 0 do
-    %__MODULE__{max_size: max_size, expiration_fn: expiration_fn}
+  @spec new(Keyword.t()) :: t()
+  def new(opts) do
+    %__MODULE__{
+      max_size: Keyword.get(opts, :max_size, @default_max_size),
+      expiration_fn: Keyword.fetch!(opts, :expiration_fn)
+    }
   end
 
   @doc false

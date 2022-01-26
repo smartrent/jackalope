@@ -174,9 +174,11 @@ defmodule JackalopeTest do
   test "recovering" do
     work_list =
       Jackalope.PersistentWorkList.new(
-        fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
-        fn {cmd, opts}, expiration -> {cmd, Keyword.put(opts, :expiration, expiration)} end,
-        10,
+        expiration_fn: fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
+        update_expiration_fn: fn {cmd, opts}, expiration ->
+          {cmd, Keyword.put(opts, :expiration, expiration)}
+        end,
+        max_size: 10,
         data_dir: "/tmp/jackalope"
       )
 
@@ -197,9 +199,11 @@ defmodule JackalopeTest do
 
     work_list =
       Jackalope.PersistentWorkList.new(
-        fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
-        fn {cmd, opts}, expiration -> {cmd, Keyword.put(opts, :expiration, expiration)} end,
-        5,
+        expiration_fn: fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
+        update_expiration_fn: fn {cmd, opts}, expiration ->
+          {cmd, Keyword.put(opts, :expiration, expiration)}
+        end,
+        max_size: 5,
         data_dir: "/tmp/jackalope"
       )
 
@@ -227,7 +231,7 @@ defmodule JackalopeTest do
     {Tortoise311.Transport.Tcp, [host: ip, port: port]}
   end
 
-  defp connect(%{client_id: client_id} = context, opts \\ []) do
+  defp connect(%{client_id: client_id} = context, opts) do
     transport = setup_server(context)
 
     handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
