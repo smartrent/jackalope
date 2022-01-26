@@ -62,7 +62,7 @@ defmodule Jackalope.PersistentWorkList do
     initial_state =
       %State{
         max_size: Keyword.get(opts, :max_size),
-        data_dir: Keyword.get(opts, :data_dir, "/data/jackalope"),
+        data_dir: Keyword.fetch!(opts, :data_dir),
         expiration_fn: Keyword.fetch!(opts, :expiration_fn),
         update_expiration_fn: Keyword.fetch!(opts, :update_expiration_fn)
       }

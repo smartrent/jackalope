@@ -132,7 +132,7 @@ defmodule Jackalope do
          handler: jackalope_handler,
          max_work_list_size: max_work_list_size,
          work_list_mod: work_list_mod,
-         data_dir: Keyword.get(opts, :data_dir)
+         data_dir: Keyword.get(opts, :data_dir, "/data/jackalope")
        ]},
       {Jackalope.Supervisor,
        [
