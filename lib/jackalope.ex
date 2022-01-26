@@ -37,6 +37,11 @@ defmodule Jackalope do
     client_id needs to be unique on the server, so two clients may not
     have the same client_id.
 
+  - `user_name` (optional) specifies the MQTT Username.
+
+  - `password` (optional) specifies the MQTT Password. Google
+    cloud IOT requires a JWT for this field.
+
   - `initial_topics` (optional) specifies a list of topic_filters
     Jackalope should connect to when a connection has been
     established. Notice that this list is also used should a reconnect
@@ -214,6 +219,20 @@ defmodule Jackalope do
       backoff: backoff_opts,
       subscriptions: subscriptions
     ]
+    |> maybe_add_user_name_password(opts)
+  end
+
+  def maybe_add_user_name_password(connection_options, user_opts) do
+    user_name = Keyword.get(user_opts, :user_name)
+    password = Keyword.get(user_opts, :password)
+
+    if Enum.any?([user_name, password], &is_nil/1) do
+      connection_options
+    else
+      connection_options
+      |> Keyword.put(:user_name, user_name)
+      |> Keyword.put(:password, password)
+    end
   end
 
   # Pass normal Tortoise311 transports through as is; assume that the
