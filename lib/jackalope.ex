@@ -222,7 +222,7 @@ defmodule Jackalope do
     |> maybe_add_user_name_password(opts)
   end
 
-  def maybe_add_user_name_password(connection_options, user_opts) do
+  defp maybe_add_user_name_password(connection_options, user_opts) do
     user_name = Keyword.get(user_opts, :user_name)
     password = Keyword.get(user_opts, :password)
 
