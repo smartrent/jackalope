@@ -8,13 +8,14 @@ defmodule Jackalope.TortoiseHandler do
 
   require Logger
 
-  defstruct handler: nil, default_last_will: nil
+  defstruct handler: nil, default_last_will: nil, payload_codec: Jason
 
   @impl Tortoise311.Handler
   def init(opts) do
     initial_state = %State{
       handler: Keyword.fetch!(opts, :handler),
-      default_last_will: Keyword.get(opts, :last_will)
+      default_last_will: Keyword.get(opts, :last_will),
+      payload_codec: Keyword.get(opts, :payload_codec, Jason)
     }
 
     {:ok, initial_state}
@@ -51,7 +52,7 @@ defmodule Jackalope.TortoiseHandler do
 
   @impl Tortoise311.Handler
   def handle_message(topic_levels, payload_string, %State{handler: handler} = state) do
-    case Jason.decode(payload_string) do
+    case state.payload_codec.decode(payload_string) do
       {:ok, payload} ->
         # Dispatch to the handle message callback on the jackalope handler
         handler.handle_message(topic_levels, payload)

@@ -107,6 +107,10 @@ defmodule Jackalope do
   - `backoff` (default: [min_interval: 1_000, max_interval: 30_000])
      gives the bounds of an exponential backoff algorithm used when retrying
      from failed connections.
+
+  - `payload_codec` (default: Jason) allows supplying a module that
+     can encode/decode messages. The default is Jason for JSON encoding
+     and decoding.
   """
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts) do
@@ -134,7 +138,8 @@ defmodule Jackalope do
          client_id: client_id,
          connection_options: connection_options(opts),
          last_will: Keyword.get(opts, :last_will),
-         work_list_mod: work_list_mod
+         work_list_mod: work_list_mod,
+         payload_codec: Keyword.get(opts, :payload_codec, Jason)
        ]}
     ]
 

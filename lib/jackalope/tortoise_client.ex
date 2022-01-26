@@ -19,7 +19,8 @@ defmodule Jackalope.TortoiseClient do
               publish_timeout: 30_000,
               last_will: nil,
               # at least once
-              default_qos: 1
+              default_qos: 1,
+              payload_codec: Jason
   end
 
   @doc "Start a Tortoise311 client"
@@ -44,17 +45,7 @@ defmodule Jackalope.TortoiseClient do
   def publish(topic, payload, opts) when is_list(opts) do
     {client_opts, opts} = Keyword.split(opts, [:timeout])
     timeout = Keyword.get(client_opts, :timeout, 60_000)
-
-    json_payload =
-      case Jason.encode(payload) do
-        {:ok, encoded_payload} ->
-          encoded_payload
-
-        {:error, reason} ->
-          "Unable to encode: #{inspect(payload)} reason: #{inspect(reason)}"
-      end
-
-    GenServer.call(__MODULE__, {:publish, topic, json_payload, opts}, timeout)
+    GenServer.call(__MODULE__, {:publish, topic, payload, opts}, timeout)
   end
 
   def publish(topic, payload, timeout) when is_integer(timeout) and timeout >= 0 do
@@ -91,7 +82,8 @@ defmodule Jackalope.TortoiseClient do
     # fully up once we got the process
     handler_opts = [
       handler: state.handler,
-      last_will: state.last_will
+      last_will: state.last_will,
+      payload_codec: state.payload_codec
     ]
 
     tortoise_handler = {
@@ -160,7 +152,16 @@ defmodule Jackalope.TortoiseClient do
   end
 
   def handle_call({:publish, topic, payload, opts}, _from, %State{} = state) do
-    {:reply, do_publish(state, topic, payload, opts), state}
+    encoded_payload =
+      case state.payload_codec.encode(payload) do
+        {:ok, encoded_payload} ->
+          encoded_payload
+
+        {:error, reason} ->
+          "Unable to encode: #{inspect(payload)} reason: #{inspect(reason)}"
+      end
+
+    {:reply, do_publish(state, topic, encoded_payload, opts), state}
   end
 
   @impl GenServer
