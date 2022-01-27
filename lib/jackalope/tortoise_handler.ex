@@ -50,23 +50,9 @@ defmodule Jackalope.TortoiseHandler do
   end
 
   @impl Tortoise311.Handler
-  def handle_message(topic_levels, payload_string, %State{handler: handler} = state) do
-    case Jason.decode(payload_string) do
-      {:ok, payload} ->
-        # Dispatch to the handle message callback on the jackalope handler
-        handler.handle_message(topic_levels, payload)
-        {:ok, state}
-
-      {:error, reason} ->
-        # Dispatch to the handle error callback on the jackalope handler if
-        # implemented
-        if function_exported?(handler, :handle_error, 1) do
-          reason = {:payload_decode_error, reason, {topic_levels, payload_string}}
-          handler.handle_error(reason)
-        end
-
-        {:ok, state}
-    end
+  def handle_message(topic_levels, payload, %State{handler: handler} = state) do
+    handler.handle_message(topic_levels, payload)
+    {:ok, state}
   end
 
   @impl Tortoise311.Handler
@@ -77,11 +63,11 @@ defmodule Jackalope.TortoiseHandler do
 
   defp package_last_will(last_will) do
     if last_will != nil do
-      payload_term = Keyword.get(last_will, :payload)
+      last_will_payload = Keyword.get(last_will, :payload)
 
       %Tortoise311.Package.Publish{
         topic: Keyword.fetch!(last_will, :topic),
-        payload: encode_last_will_payload(payload_term),
+        payload: last_will_payload,
         qos: Keyword.get(last_will, :qos, 0),
         retain: false
       }
@@ -89,7 +75,4 @@ defmodule Jackalope.TortoiseHandler do
       nil
     end
   end
-
-  defp encode_last_will_payload(nil), do: nil
-  defp encode_last_will_payload(term), do: Jason.encode!(term)
 end
