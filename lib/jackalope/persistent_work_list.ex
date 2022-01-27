@@ -167,8 +167,10 @@ defmodule Jackalope.PersistentWorkList do
 
   defp record_time_now(state) do
     time = Expiration.now() |> Integer.to_string()
-    path = Path.join(state.data_dir, "time")
-    :ok = File.write!(path, time, [:write])
+    new_time_path = Path.join(state.data_dir, "new_time")
+    time_path = Path.join(state.data_dir, "time")
+    :ok = File.write!(new_time_path, time, [:write])
+    :ok = File.rename!(new_time_path, time_path)
   end
 
   # Peek at oldest non-pending work item
