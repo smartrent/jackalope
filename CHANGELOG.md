@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.7.0
+
+* Updated
+  * BREAKING CHANGE: Jackalope no longer encodes or decodes MQTT message payloads.
+
 ## v0.6.0
 
 * Updates
