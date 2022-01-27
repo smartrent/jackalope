@@ -80,9 +80,7 @@ defmodule Jackalope.Handler do
   """
   @callback handle_error(reason) :: any()
             when reason:
-                   {:payload_decode_error, Jason.DecodeError.t(),
-                    {topic_levels, payload_string :: String.t()}}
-                   | {:publish_error, {topic, payload, opts}, error_reason :: term}
+                   {:publish_error, {topic, payload, opts}, error_reason :: term}
                    | {:publish_error, jackalope_work_order :: term, :ttl_expired},
                  opts: Keyword.t()
 

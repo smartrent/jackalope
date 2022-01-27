@@ -45,16 +45,7 @@ defmodule Jackalope.TortoiseClient do
     {client_opts, opts} = Keyword.split(opts, [:timeout])
     timeout = Keyword.get(client_opts, :timeout, 60_000)
 
-    json_payload =
-      case Jason.encode(payload) do
-        {:ok, encoded_payload} ->
-          encoded_payload
-
-        {:error, reason} ->
-          "Unable to encode: #{inspect(payload)} reason: #{inspect(reason)}"
-      end
-
-    GenServer.call(__MODULE__, {:publish, topic, json_payload, opts}, timeout)
+    GenServer.call(__MODULE__, {:publish, topic, payload, opts}, timeout)
   end
 
   def publish(topic, payload, timeout) when is_integer(timeout) and timeout >= 0 do

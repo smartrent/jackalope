@@ -46,13 +46,13 @@ defmodule JackalopeTest do
           context,
           qos: 0,
           topic: "foo",
-          payload: expected_payload = %{"msg" => "hello"}
+          payload: expected_payload = "{\"msg\": \"hello\"}"
         )
 
-      assert :ok = Jackalope.publish("foo", %{"msg" => "hello"}, qos: 0)
+      assert :ok = Jackalope.publish("foo", "{\"msg\": \"hello\"}", qos: 0)
       # this is what the server received
       assert %Package.Publish{topic: "foo", qos: 0, payload: payload} = flush.()
-      assert expected_payload == Jason.decode!(payload)
+      assert expected_payload == payload
     end
 
     test "publish with QoS=1", context do
@@ -63,14 +63,14 @@ defmodule JackalopeTest do
           context,
           qos: 1,
           topic: "foo",
-          payload: expected_payload = %{"msg" => "hello"}
+          payload: expected_payload = "{\"msg\": \"hello\"}"
         )
 
-      assert :ok = Jackalope.publish("foo", %{"msg" => "hello"}, qos: 1)
+      assert :ok = Jackalope.publish("foo", "{\"msg\": \"hello\"}", qos: 1)
       # this is what the server received
       assert received_publish = flush.()
       assert %Package.Publish{topic: "foo", qos: 1} = received_publish
-      assert expected_payload == Jason.decode!(received_publish.payload)
+      assert expected_payload == received_publish.payload
     end
   end
 
@@ -89,7 +89,7 @@ defmodule JackalopeTest do
         Enum.reduce(1..15, work_list, fn i, acc ->
           WorkList.push(
             acc,
-            {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
+            {{:publish, "foo", "{\"msg\": \"hello #{i}\"}", [qos: 1]},
              [expiration: Expiration.expiration(:infinity)]}
           )
         end)
@@ -107,7 +107,7 @@ defmodule JackalopeTest do
         Enum.reduce(1..5, work_list, fn i, acc ->
           WorkList.push(
             acc,
-            {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
+            {{:publish, "foo", "{\"msg\": \"hello #{i}\"}", [qos: 1]},
              [expiration: Expiration.expiration(:infinity)]}
           )
         end)
@@ -134,7 +134,7 @@ defmodule JackalopeTest do
         Enum.reduce(1..15, work_list, fn i, acc ->
           WorkList.push(
             acc,
-            {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
+            {{:publish, "foo", "{\"msg\": \"hello #{i}\"}", [qos: 1]},
              [expiration: Expiration.expiration(:infinity)]}
           )
           |> WorkList.pending(make_ref())
@@ -153,7 +153,7 @@ defmodule JackalopeTest do
         Enum.reduce(1..5, work_list, fn i, acc ->
           WorkList.push(
             acc,
-            {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
+            {{:publish, "foo", "{\"msg\": \"hello #{i}\"}", [qos: 1]},
              [expiration: Expiration.expiration(:infinity)]}
           )
         end)
@@ -228,7 +228,6 @@ defmodule JackalopeTest do
   defp expect_publish(context, %Package.Publish{qos: 0} = publish) do
     # setup the expectation of a publish and assert that the server
     # received the message
-    publish = json_encode_payload(publish)
 
     script = [{:receive, publish}]
     {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
@@ -243,7 +242,6 @@ defmodule JackalopeTest do
   defp expect_publish(context, %Package.Publish{qos: 1} = publish) do
     # setup the expectation of a publish, and acknowledge that
     # publish; assert that the server received the message
-    publish = json_encode_payload(publish)
 
     script = [{:receive, publish}]
     {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
@@ -271,12 +269,6 @@ defmodule JackalopeTest do
       qos: qos,
       payload: payload
     })
-  end
-
-  defp json_encode_payload(%Package.Publish{payload: nil} = keep), do: keep
-
-  defp json_encode_payload(%Package.Publish{payload: data} = publish) do
-    %Package.Publish{publish | payload: Jason.encode!(data)}
   end
 
   defp pause_mqtt_server(context) do
