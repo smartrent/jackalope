@@ -79,9 +79,6 @@ defmodule Jackalope.Session do
     work_list =
       Keyword.merge(opts,
         expiration_fn: fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
-        update_expiration_fn: fn {cmd, opts}, expiration ->
-          {cmd, Keyword.put(opts, :expiration, expiration)}
-        end,
         max_size: max_work_list_size
       )
       |> work_list_mod.new()

@@ -175,9 +175,6 @@ defmodule JackalopeTest do
     work_list =
       Jackalope.PersistentWorkList.new(
         expiration_fn: fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
-        update_expiration_fn: fn {cmd, opts}, expiration ->
-          {cmd, Keyword.put(opts, :expiration, expiration)}
-        end,
         max_size: 10,
         data_dir: "/tmp/jackalope"
       )
@@ -193,6 +190,7 @@ defmodule JackalopeTest do
         )
       end)
 
+    assert WorkList.count(work_list) == 10
     ref = make_ref()
     work_list = WorkList.pending(work_list, ref)
     :ok = GenServer.stop(work_list, :normal)
@@ -200,9 +198,6 @@ defmodule JackalopeTest do
     work_list =
       Jackalope.PersistentWorkList.new(
         expiration_fn: fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
-        update_expiration_fn: fn {cmd, opts}, expiration ->
-          {cmd, Keyword.put(opts, :expiration, expiration)}
-        end,
         max_size: 5,
         data_dir: "/tmp/jackalope"
       )
