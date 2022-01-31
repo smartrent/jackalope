@@ -381,9 +381,12 @@ defmodule Jackalope.PersistentWorkList do
 
     delta_time = Expiration.now() - latest_time(state)
 
-    expirations =
+    item_files =
       File.ls!(state.data_dir)
       |> Enum.filter(&Regex.match?(~r/.*\.item/, &1))
+
+    expirations =
+      item_files
       |> Enum.reduce(
         [],
         fn item_file, acc ->
@@ -408,7 +411,7 @@ defmodule Jackalope.PersistentWorkList do
 
     item_indices = Map.keys(expirations)
 
-    if Enum.empty?(item_indices) do
+    if Enum.empty?(item_files) do
       reset_state(state)
     else
       bottom_index = Enum.min(item_indices)
