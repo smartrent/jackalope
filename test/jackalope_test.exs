@@ -85,7 +85,7 @@ defmodule JackalopeTest do
           )
         end)
 
-      assert WorkList.count(work_list) == 10
+      assert count(work_list) == 10
     end
 
     test "pending and done work items #{work_list_mod}", context do
@@ -103,7 +103,7 @@ defmodule JackalopeTest do
           )
         end)
 
-      assert WorkList.count(work_list) == 5
+      assert count(work_list) == 5
 
       ref = make_ref()
 
@@ -112,7 +112,7 @@ defmodule JackalopeTest do
         |> WorkList.pending(ref)
         |> WorkList.done(ref)
 
-      assert WorkList.count(work_list) == 4
+      assert count(work_list) == 4
     end
 
     test "dropping work items #{work_list_mod}", context do
@@ -130,7 +130,7 @@ defmodule JackalopeTest do
           )
         end)
 
-      assert WorkList.count(work_list) == 10
+      assert count(work_list) == 10
     end
 
     test "reset_pending work items #{work_list_mod}", context do
@@ -151,9 +151,9 @@ defmodule JackalopeTest do
       ref = make_ref()
 
       work_list = WorkList.pending(work_list, ref)
-      assert WorkList.count(work_list) == 4
+      assert count(work_list) == 4
       work_list = WorkList.reset_pending(work_list)
-      assert WorkList.count(work_list) == 5
+      assert count(work_list) == 5
     end
   end
 
@@ -175,9 +175,6 @@ defmodule JackalopeTest do
     work_list =
       Jackalope.PersistentWorkList.new(
         expiration_fn: fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
-        update_expiration_fn: fn {cmd, opts}, expiration ->
-          {cmd, Keyword.put(opts, :expiration, expiration)}
-        end,
         max_size: 10,
         data_dir: "/tmp/jackalope"
       )
@@ -193,6 +190,7 @@ defmodule JackalopeTest do
         )
       end)
 
+    assert count(work_list) == 10
     ref = make_ref()
     work_list = WorkList.pending(work_list, ref)
     :ok = GenServer.stop(work_list, :normal)
@@ -200,14 +198,16 @@ defmodule JackalopeTest do
     work_list =
       Jackalope.PersistentWorkList.new(
         expiration_fn: fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
-        update_expiration_fn: fn {cmd, opts}, expiration ->
-          {cmd, Keyword.put(opts, :expiration, expiration)}
-        end,
         max_size: 5,
         data_dir: "/tmp/jackalope"
       )
 
-    assert WorkList.count(work_list) == 5
+    assert count(work_list) == 5
+  end
+
+  defp count(work_list) do
+    %{count_waiting: count} = WorkList.info(work_list)
+    count
   end
 
   defp get_session_work_list() do
@@ -260,7 +260,9 @@ defmodule JackalopeTest do
 
     if reset? do
       WorkList.remove_all(work_list)
-      assert WorkList.empty?(work_list)
+      info = WorkList.info(work_list)
+      assert info.count_waiting == 0
+      assert info.count_pending == 0
     end
   end
 

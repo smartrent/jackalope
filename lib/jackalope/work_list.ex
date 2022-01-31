@@ -25,15 +25,12 @@ defprotocol Jackalope.WorkList do
   @doc "Remove an item from the pending set"
   @spec done(work_list(), reference()) :: {work_list(), item()}
   def done(work_list, ref)
-  @doc "Count the number of work items"
-  @spec count(work_list()) :: non_neg_integer()
-  def count(work_list)
-  @doc "Count the number of pending work items"
-  @spec count_pending(work_list()) :: non_neg_integer()
-  def count_pending(work_list)
-  @doc "Are there work items"
-  @spec empty?(work_list()) :: boolean
-  def empty?(work_list)
+  @doc "Info about the work list"
+  @spec info(work_list()) :: %{
+          required(:count_waiting) => non_neg_integer(),
+          required(:count_pending) => non_neg_integer()
+        }
+  def info(work_list)
   @doc "Remove all work items"
   @spec remove_all(work_list()) :: work_list()
   def remove_all(work_list)
