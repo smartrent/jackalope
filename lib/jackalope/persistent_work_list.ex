@@ -78,12 +78,8 @@ defmodule Jackalope.PersistentWorkList do
   end
 
   @impl GenServer
-  def handle_call(:count, _from, state) do
-    {:reply, count(state), state}
-  end
-
-  def handle_call(:count_pending, _from, state) do
-    {:reply, count_pending(state), state}
+  def handle_call(:info, _from, state) do
+    {:reply, info(state), state}
   end
 
   def handle_call(:peek, _from, state) do
@@ -150,6 +146,10 @@ defmodule Jackalope.PersistentWorkList do
   end
 
   ## PRIVATE
+
+  defp info(state) do
+    %{count_waiting: count(state), count_pending: count_pending(state)}
+  end
 
   defp count(state) do
     expired_count =
@@ -504,17 +504,9 @@ defimpl Jackalope.WorkList, for: PID do
   end
 
   @impl Jackalope.WorkList
-  def count(work_list) do
-    GenServer.call(work_list, :count)
+  def info(work_list) do
+    GenServer.call(work_list, :info)
   end
-
-  @impl Jackalope.WorkList
-  def count_pending(work_list) do
-    GenServer.call(work_list, :count_pending)
-  end
-
-  @impl Jackalope.WorkList
-  def empty?(work_list), do: peek(work_list) == nil
 
   @impl Jackalope.WorkList
   def remove_all(work_list) do
