@@ -101,9 +101,6 @@ defmodule Jackalope do
         MQTT topics.
 
       - `payload` (default: nil) the payload of the last will message;
-        notice that we will attempt to JSON encode the payload term
-        (unless it is nil), so it will fail if the data fails the JSON
-        encode.
 
       - `qos` (default: 0) either 0 or 1, denoting the quality of
         service the last will message should get published with; note
@@ -189,8 +186,6 @@ defmodule Jackalope do
     - `ttl` (default `3_600_000`) sets how long (in msecs) publishing the message will be
       retried until it has expired.
 
-  Notice that Jackalope will JSON encode the `payload`; so the data
-  should be JSON encodable.
   """
   @spec publish(String.t(), any, options) ::
           :ok | {:error, :invalid_qos}
