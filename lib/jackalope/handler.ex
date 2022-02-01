@@ -50,11 +50,6 @@ defmodule Jackalope.Handler do
   The callback will receive two arguments; the MQTT topic in list
   form, where each of the topic levels are an item. This allows us to
   pattern match on topic filters with wildcards.
-
-  The payload should be a term; at this point the message will have
-  been run through a JSON decoder. If the JSON decode should fail the
-  optional `handle_error/1` callback would have been triggered
-  instead.
   """
   @callback handle_message(topic_levels, payload) :: any()
 
