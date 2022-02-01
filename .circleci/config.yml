@@ -18,6 +18,7 @@ jobs:
           keys:
             - v1-mix-cache-{{ checksum "mix.lock" }}
       - run: mix deps.get
+      - run: mix deps.unlock --check-unused
       - run: mix compile
       - run: mix docs
       - run: mix hex.build
