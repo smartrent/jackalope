@@ -3,10 +3,10 @@ defmodule Jackalope.TransientWorkList do
   A simple work list that does not survive across reboots.
   """
 
-  require Logger
-
   alias Jackalope.Item
   alias Jackalope.Timestamp
+
+  require Logger
 
   @default_max_size 100
 

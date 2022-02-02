@@ -1,4 +1,6 @@
 defmodule Jackalope.Persistent.State do
+  @moduledoc false
+
   defstruct [:jack_time_offset, :oldest_index, :next_index]
 
   @type t() :: %__MODULE__{

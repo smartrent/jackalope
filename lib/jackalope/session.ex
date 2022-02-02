@@ -13,9 +13,11 @@ defmodule Jackalope.Session do
   use GenServer
 
   alias __MODULE__, as: State
-  alias Jackalope.{TortoiseClient, WorkList}
+
   alias Jackalope.Item
   alias Jackalope.Timestamp
+  alias Jackalope.TortoiseClient
+  alias Jackalope.WorkList
 
   require Logger
 
