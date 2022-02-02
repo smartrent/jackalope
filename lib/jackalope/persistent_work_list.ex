@@ -6,6 +6,7 @@ defmodule Jackalope.PersistentWorkList do
   use GenServer
 
   alias Jackalope.Persistent.ItemFile
+  alias Jackalope.Persistent.Meta
 
   require Logger
 
@@ -27,7 +28,9 @@ defmodule Jackalope.PersistentWorkList do
             # Indices of pending items mapped by their references.
             pending: %{required(reference()) => non_neg_integer()},
             # The file directory persists items waiting execution or pending confirmation of execution.
-            data_dir: String.t()
+            data_dir: String.t(),
+            # The most recently persisted Jackalope timestamp
+            persisted_timestamp: Timestamp.t()
           }
 
     defstruct bottom_index: 0,
@@ -35,7 +38,8 @@ defmodule Jackalope.PersistentWorkList do
               expirations: %{},
               pending: %{},
               data_dir: nil,
-              max_size: nil
+              max_size: nil,
+              persisted_timestamp: 0
   end
 
   @doc "Create a new work list"
@@ -53,9 +57,7 @@ defmodule Jackalope.PersistentWorkList do
       data_dir: Keyword.fetch!(opts, :data_dir)
     }
 
-    recovered_jackalope_time = latest_time(initial_state)
-
-    state = recover(initial_state, recovered_jackalope_time)
+    state = recover(initial_state)
 
     {:ok, state}
   end
@@ -70,7 +72,7 @@ defmodule Jackalope.PersistentWorkList do
   end
 
   def handle_call(:latest_timestamp, _from, state) do
-    {:reply, latest_time(state), state}
+    {:reply, state.persisted_timestamp, state}
   end
 
   def handle_call({:push, item, now}, _from, state) do
@@ -84,8 +86,8 @@ defmodule Jackalope.PersistentWorkList do
   end
 
   def handle_call({:sync, now}, _from, state) do
-    record_time(state, now)
-    {:reply, :ok, state}
+    Meta.save(state, now)
+    {:reply, :ok, %{state | persisted_timestamp: now}}
   end
 
   # The item becoming pending is always the one at bottom index
@@ -153,14 +155,6 @@ defmodule Jackalope.PersistentWorkList do
 
   # Ought to be the same as Enum.count(state.expirations)
   defp persisted_count(state), do: count(state) + count_pending(state)
-
-  defp record_time(state, now) do
-    time = now |> Integer.to_string()
-    new_time_path = Path.join(state.data_dir, "new_time")
-    time_path = Path.join(state.data_dir, "time")
-    :ok = File.write!(new_time_path, time, [:write])
-    :ok = File.rename!(new_time_path, time_path)
-  end
 
   # Peek at oldest non-pending work item
   defp peek_oldest(state) do
@@ -318,7 +312,20 @@ defmodule Jackalope.PersistentWorkList do
 
   defp pending_item?(index, state), do: Map.has_key?(state.pending, index)
 
-  defp recover(state, now) do
+  defp restore_metadata(state) do
+    case Meta.load(state) do
+      {:ok, meta} ->
+        %{state | persisted_timestamp: meta.latest_timestamp}
+
+      _ ->
+        # Initialize defaults
+        %{state | persisted_timestamp: 0}
+    end
+  end
+
+  defp recover(state) do
+    state = restore_metadata(state)
+
     :ok = File.mkdir_p!(state.data_dir)
 
     item_files =
@@ -360,7 +367,7 @@ defmodule Jackalope.PersistentWorkList do
           next_index: last_index + 1,
           expirations: expirations
       }
-      |> bound_items(now)
+      |> bound_items(state.persisted_timestamp)
     end
   end
 
@@ -378,26 +385,6 @@ defmodule Jackalope.PersistentWorkList do
         pending: %{},
         expirations: %{}
     }
-  end
-
-  defp latest_time(state) do
-    path = Path.join(state.data_dir, "time")
-
-    if File.exists?(path) do
-      time_s = File.read!(path)
-
-      case Integer.parse(time_s) do
-        {time, _} ->
-          time
-
-        other ->
-          Logger.warn("[Jackalope] Invalid stored latest time: #{inspect(other)}")
-          0
-      end
-    else
-      Logger.info("[Jackalope] No latest time found for recovery. Using now.")
-      0
-    end
   end
 end
 
