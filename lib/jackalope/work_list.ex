@@ -24,6 +24,16 @@ defprotocol Jackalope.WorkList do
   @spec pop(work_list()) :: work_list()
   def pop(work_list)
 
+  @doc """
+  Sync the state of the work list with anything that backs it
+
+  This function is called periodically and if Jackalope is terminating so that
+  the work list implementation can try to get as much as possible recorded
+  for an unexpected or expected restart.
+  """
+  @spec sync(work_list(), Timestamp.t()) :: work_list()
+  def sync(work_list, now)
+
   @doc "Move a work item to the pending set as it is being worked on, awaiting confirmation of completion."
   @spec pending(work_list(), reference(), Timestamp.t()) :: work_list()
   def pending(work_list, ref, now)

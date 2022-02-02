@@ -41,7 +41,7 @@ defmodule Jackalope.TortoiseClient do
   @doc "Publish a message"
   @spec publish(Item.t()) :: :ok | {:ok, reference()} | {:error, atom}
   def publish(%Item{} = item) do
-    GenServer.call(__MODULE__, {:publish, item}, timeout: 60000)
+    GenServer.call(__MODULE__, {:publish, item}, 60000)
   end
 
   @doc "Do we have an MQTT connection?"
@@ -181,7 +181,7 @@ defmodule Jackalope.TortoiseClient do
   end
 
   defp do_publish(%State{client_id: client_id} = state, item) do
-    qos = Keyword.get(item.opts, :qos, state.default_qos)
+    qos = Keyword.get(item.options, :qos, state.default_qos)
     Logger.info("[Jackalope] Publishing #{item.topic} with payload #{item.payload}")
     # Async publish
     case Tortoise311.publish(client_id, item.topic, item.payload, qos: qos, timeout: 5000) do

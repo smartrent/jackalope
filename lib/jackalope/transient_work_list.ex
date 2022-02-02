@@ -170,7 +170,7 @@ defimpl Jackalope.WorkList, for: Jackalope.TransientWorkList do
   def reset_pending(work_list) do
     pending_items = Map.values(work_list.pending)
 
-    TransientWorkList.prepend(%TransientWorkList{work_list | pending: %{}}, pending_items)
+    %{work_list | pending: %{}, items: pending_items ++ work_list.items}
   end
 
   @impl Jackalope.WorkList
@@ -188,5 +188,10 @@ defimpl Jackalope.WorkList, for: Jackalope.TransientWorkList do
   @impl Jackalope.WorkList
   def remove_all(work_list) do
     %TransientWorkList{work_list | items: [], pending: %{}}
+  end
+
+  @impl Jackalope.WorkList
+  def sync(work_list, _now) do
+    work_list
   end
 end

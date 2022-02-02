@@ -127,7 +127,7 @@ defmodule JackalopeTest do
 
       {work_list, _item} =
         work_list
-        |> WorkList.pending(ref)
+        |> WorkList.pending(ref, now)
         |> WorkList.done(ref)
 
       assert count(work_list) == 4
@@ -182,7 +182,7 @@ defmodule JackalopeTest do
 
       ref = make_ref()
 
-      work_list = WorkList.pending(work_list, ref)
+      work_list = WorkList.pending(work_list, ref, now)
       assert count(work_list) == 4
       work_list = WorkList.reset_pending(work_list)
       assert count(work_list) == 5
@@ -216,8 +216,12 @@ defmodule JackalopeTest do
 
     assert count(work_list) == 10
     ref = make_ref()
-    work_list = WorkList.pending(work_list, ref)
-    :ok = GenServer.stop(work_list, :normal)
+
+    work_list =
+      WorkList.pending(work_list, ref, now)
+      |> WorkList.sync(now)
+
+    :ok = GenServer.stop(work_list.pid)
 
     work_list =
       Jackalope.PersistentWorkList.new(

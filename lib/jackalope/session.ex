@@ -25,6 +25,9 @@ defmodule Jackalope.Session do
   # One hour
   @default_ttl_msecs 3_600_000
 
+  # Sync each minute
+  @sync_period 60_000
+
   defstruct connection_status: :offline,
             handler: nil,
             work_list: nil,
@@ -95,6 +98,11 @@ defmodule Jackalope.Session do
       handler: handler,
       time_offset: offset
     }
+
+    # Schedule a sync immediately since it could be that recovery or first time
+    # initialization caused the in-memory state to be diverge from what was
+    # persisted
+    send(self(), :tick)
 
     {:ok, initial_state, {:continue, :consume_work_list}}
   end
@@ -215,6 +223,27 @@ defmodule Jackalope.Session do
           end
         end
     end
+  end
+
+  @impl GenServer
+  def handle_info(:tick, state) do
+    now = jackalope_now(state)
+    new_work_list = WorkList.sync(state.work_list, now)
+
+    Process.send_after(self(), :tick, @sync_period)
+
+    {:noreply, %{state | work_list: new_work_list}}
+  end
+
+  def handle_info(_other, state) do
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def terminate(_reason, state) do
+    now = jackalope_now(state)
+    new_work_list = WorkList.sync(state.work_list, now)
+    %{state | work_list: new_work_list}
   end
 
   ### PRIVATE HELPERS --------------------------------------------------
