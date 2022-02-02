@@ -6,7 +6,9 @@ defmodule Jackalope.TortoiseClient do
 
   use GenServer
 
+  alias Jackalope.Item
   alias Jackalope.Session
+
   require Logger
 
   defmodule State do
@@ -37,20 +39,9 @@ defmodule Jackalope.TortoiseClient do
   end
 
   @doc "Publish a message"
-  @spec publish(String.t(), map(), opts :: Keyword.t() | non_neg_integer) ::
-          :ok | {:ok, reference()} | {:error, atom}
-  def publish(topic, payload, opts \\ [])
-
-  def publish(topic, payload, opts) when is_list(opts) do
-    {client_opts, opts} = Keyword.split(opts, [:timeout])
-    timeout = Keyword.get(client_opts, :timeout, 60_000)
-
-    GenServer.call(__MODULE__, {:publish, topic, payload, opts}, timeout)
-  end
-
-  def publish(topic, payload, timeout) when is_integer(timeout) and timeout >= 0 do
-    # lift timeout to options
-    publish(topic, payload, timeout: timeout)
+  @spec publish(Item.t()) :: :ok | {:ok, reference()} | {:error, atom}
+  def publish(%Item{} = item) do
+    GenServer.call(__MODULE__, {:publish, item}, timeout: 60000)
   end
 
   @doc "Do we have an MQTT connection?"
@@ -150,8 +141,8 @@ defmodule Jackalope.TortoiseClient do
     {:reply, tortoise_state, state}
   end
 
-  def handle_call({:publish, topic, payload, opts}, _from, %State{} = state) do
-    {:reply, do_publish(state, topic, payload, opts), state}
+  def handle_call({:publish, item}, _from, %State{} = state) do
+    {:reply, do_publish(state, item), state}
   end
 
   @impl GenServer
@@ -189,11 +180,11 @@ defmodule Jackalope.TortoiseClient do
     {:noreply, state}
   end
 
-  defp do_publish(%State{client_id: client_id} = state, topic, payload, opts) do
-    qos = Keyword.get(opts, :qos, state.default_qos)
-    Logger.info("[Jackalope] Publishing #{topic} with payload #{payload}")
+  defp do_publish(%State{client_id: client_id} = state, item) do
+    qos = Keyword.get(item.opts, :qos, state.default_qos)
+    Logger.info("[Jackalope] Publishing #{item.topic} with payload #{item.payload}")
     # Async publish
-    case Tortoise311.publish(client_id, topic, payload, qos: qos, timeout: 5000) do
+    case Tortoise311.publish(client_id, item.topic, item.payload, qos: qos, timeout: 5000) do
       :ok ->
         :ok
 
@@ -202,7 +193,7 @@ defmodule Jackalope.TortoiseClient do
 
       {:error, reason} ->
         if function_exported?(state.handler, :handle_error, 1) do
-          reason = {:publish_error, {topic, payload, opts}, reason}
+          reason = {:publish_error, {item.topic, item.payload, item.opts}, reason}
           state.handler.handle_error(reason)
         end
 

@@ -3,40 +3,40 @@ defmodule Jackalope.TransientWorkList do
   A simple work list that does not survive across reboots.
   """
 
-  alias Jackalope.WorkList.Expiration
-
   require Logger
+
+  alias Jackalope.Item
+  alias Jackalope.Timestamp
+
   @default_max_size 100
 
   defstruct items: [],
             pending: %{},
-            max_size: @default_max_size,
-            expiration_fn: nil
+            max_size: @default_max_size
 
-  @type t() :: %__MODULE__{items: list(), max_size: non_neg_integer()}
+  @type t() :: %__MODULE__{items: [Item.t()], pending: map(), max_size: non_neg_integer()}
 
   @doc "Create a new work list"
   @spec new(Keyword.t()) :: t()
   def new(opts) do
     %__MODULE__{
-      max_size: Keyword.get(opts, :max_size, @default_max_size),
-      expiration_fn: Keyword.fetch!(opts, :expiration_fn)
+      max_size: Keyword.get(opts, :max_size, @default_max_size)
     }
   end
 
   @doc false
-  @spec prepend(t(), list()) :: t()
-  def prepend(work_list, items) when is_list(items) do
+  @spec prepend(t(), [Item.t()], Timestamp.t()) :: t()
+  def prepend(work_list, items, now) when is_list(items) do
     updated_items =
       (items ++ work_list.items)
-      |> bound_work_items(work_list)
+      |> bound_work_items(work_list, now)
 
     %__MODULE__{work_list | items: updated_items}
   end
 
   @doc false
-  @spec bound_pending_items(any, atom | t()) :: any
-  def bound_pending_items(pending, work_list) do
+  @spec bound_pending_items(map(), t(), Timestamp.t()) :: map()
+  def bound_pending_items(pending, work_list, now) do
     if Enum.count(pending) > work_list.max_size do
       # Trim expired pending requests
       kept_pairs =
@@ -44,7 +44,7 @@ defmodule Jackalope.TransientWorkList do
           pending,
           [],
           fn {ref, item}, acc ->
-            if Expiration.unexpired?(item, work_list.expiration_fn) do
+            if now > item.expiration do
               [{ref, item} | acc]
             else
               acc
@@ -56,7 +56,7 @@ defmodule Jackalope.TransientWorkList do
       if Enum.count(kept_pairs) > work_list.max_size do
         [{ref, item} | newer_pairs] =
           Enum.sort(kept_pairs, fn {_, item1}, {_, item2} ->
-            work_list.expiration_fn.(item1) < work_list.expiration_fn.(item2)
+            item1.expiration < item2.expiration
           end)
 
         Logger.info(
@@ -74,8 +74,8 @@ defmodule Jackalope.TransientWorkList do
   end
 
   @doc false
-  @spec bound_work_items([any()], t()) :: [any()]
-  def bound_work_items(items, work_list) do
+  @spec bound_work_items([Item.t()], t(), Timestamp.t()) :: [Item.t()]
+  def bound_work_items(items, work_list, now) do
     current_size = length(items)
 
     if current_size <= work_list.max_size do
@@ -85,7 +85,7 @@ defmodule Jackalope.TransientWorkList do
         "[Jackalope] The worklist exceeds #{work_list.max_size} (#{current_size}). Looking to shrink it."
       )
 
-      {active_items, deleted_count} = remove_expired_work_items(items, work_list.expiration_fn)
+      {active_items, deleted_count} = remove_expired_work_items(items, now)
 
       active_size = current_size - deleted_count
 
@@ -101,13 +101,13 @@ defmodule Jackalope.TransientWorkList do
     end
   end
 
-  defp remove_expired_work_items(items, expiration_fn) do
+  defp remove_expired_work_items(items, now) do
     {list, count} =
       Enum.reduce(
         items,
         {[], 0},
         fn item, {active_list, deleted_count} ->
-          if Expiration.unexpired?(item, expiration_fn),
+          if item.expiration >= now,
             do: {[item | active_list], deleted_count},
             else: {active_list, deleted_count + 1}
         end
@@ -122,10 +122,21 @@ defimpl Jackalope.WorkList, for: Jackalope.TransientWorkList do
   require Logger
 
   @impl Jackalope.WorkList
-  def push(work_list, item) do
+  def latest_timestamp(_work_list) do
+    # Transient work lists aren't persisted across restarts, so
+    # follow monotonic time. This will result in Jackalope timestamps
+    # roughly being the same as `System.monotonic_time/1`. The rough
+    # part is that the offset calculation could be a small number of milliseconds
+    # off based on how long it takes to get from here to the offset calculation
+    # code. That doesn't changing anything, though.
+    System.monotonic_time(:millisecond)
+  end
+
+  @impl Jackalope.WorkList
+  def push(work_list, item, now) do
     updated_items =
       [item | work_list.items]
-      |> TransientWorkList.bound_work_items(work_list)
+      |> TransientWorkList.bound_work_items(work_list, now)
 
     %TransientWorkList{work_list | items: updated_items}
   end
@@ -141,11 +152,12 @@ defimpl Jackalope.WorkList, for: Jackalope.TransientWorkList do
   end
 
   @impl Jackalope.WorkList
-  def pending(work_list, ref) do
+  def pending(work_list, ref, now) do
     item = hd(work_list.items)
 
     updated_pending =
-      Map.put(work_list.pending, ref, item) |> TransientWorkList.bound_pending_items(work_list)
+      Map.put(work_list.pending, ref, item)
+      |> TransientWorkList.bound_pending_items(work_list, now)
 
     %TransientWorkList{
       work_list

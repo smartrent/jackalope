@@ -2,10 +2,14 @@ defmodule JackalopeTest do
   use ExUnit.Case, async: false
   doctest Jackalope
 
+  alias Jackalope.Timestamp
   alias Jackalope.WorkList
-  alias Jackalope.WorkList.Expiration
+  alias Jackalope.Item
+
   alias JackalopeTest.ScriptedMqttServer, as: MqttServer
   alias Tortoise311.Package
+
+  @one_day 86_400_000
 
   setup context do
     {:ok, mqtt_server_pid} = start_supervised(MqttServer)
@@ -74,14 +78,21 @@ defmodule JackalopeTest do
       connect(context, max_work_list_size: 10, work_list_mod: unquote(work_list_mod))
       pause_mqtt_server(context)
 
+      now = Timestamp.now(0)
+
       work_list = get_session_work_list()
 
       work_list =
         Enum.reduce(1..15, work_list, fn i, acc ->
           WorkList.push(
             acc,
-            {{:publish, "foo", "{\"msg\": \"hello #{i}\"}", [qos: 1]},
-             [expiration: Expiration.expiration(:infinity)]}
+            %Item{
+              topic: "foo",
+              payload: "{\"msg\": \"hello #{i}\"}",
+              expiration: Timestamp.ttl_to_expiration(now, @one_day),
+              options: [qos: 1]
+            },
+            now
           )
         end)
 
@@ -92,14 +103,21 @@ defmodule JackalopeTest do
       connect(context, max_work_list_size: 10, work_list_mod: unquote(work_list_mod))
       pause_mqtt_server(context)
 
+      now = Timestamp.now(0)
+
       work_list = get_session_work_list()
 
       work_list =
         Enum.reduce(1..5, work_list, fn i, acc ->
           WorkList.push(
             acc,
-            {{:publish, "foo", "{\"msg\": \"hello #{i}\"}", [qos: 1]},
-             [expiration: Expiration.expiration(:infinity)]}
+            %Item{
+              topic: "foo",
+              payload: "{\"msg\": \"hello #{i}\"}",
+              expiration: Timestamp.ttl_to_expiration(now, @one_day),
+              options: [qos: 1]
+            },
+            now
           )
         end)
 
@@ -119,14 +137,21 @@ defmodule JackalopeTest do
       connect(context, max_work_list_size: 10, work_list_mod: unquote(work_list_mod))
       pause_mqtt_server(context)
 
+      now = Timestamp.now(0)
+
       work_list = get_session_work_list()
 
       work_list =
         Enum.reduce(1..15, work_list, fn i, acc ->
           WorkList.push(
             acc,
-            {{:publish, "foo", "{\"msg\": \"hello #{i}\"}", [qos: 1]},
-             [expiration: Expiration.expiration(:infinity)]}
+            %Item{
+              topic: "foo",
+              payload: "{\"msg\": \"hello #{i}\"}",
+              expiration: Timestamp.ttl_to_expiration(now, @one_day),
+              options: [qos: 1]
+            },
+            now
           )
         end)
 
@@ -137,14 +162,21 @@ defmodule JackalopeTest do
       connect(context, max_work_list_size: 10, work_list_mod: unquote(work_list_mod))
       pause_mqtt_server(context)
 
+      now = Timestamp.now(0)
+
       work_list = get_session_work_list()
 
       work_list =
         Enum.reduce(1..5, work_list, fn i, acc ->
           WorkList.push(
             acc,
-            {{:publish, "foo", "{\"msg\": \"hello #{i}\"}", [qos: 1]},
-             [expiration: Expiration.expiration(:infinity)]}
+            %Item{
+              topic: "foo",
+              payload: "{\"msg\": \"hello #{i}\"}",
+              expiration: Timestamp.ttl_to_expiration(now, @one_day),
+              options: [qos: 1]
+            },
+            now
           )
         end)
 
@@ -157,27 +189,14 @@ defmodule JackalopeTest do
     end
   end
 
-  test "rebasing expiration" do
-    time = Expiration.now()
-    exp1 = Expiration.expiration(100)
-    exp2 = Expiration.expiration(200)
-    stop_time = time + 10
-    assert Expiration.after?(exp2, exp1)
-    restart_time = Enum.random(-10_000..10_000)
-    ttl1 = Expiration.rebase_expiration(exp1, stop_time, restart_time)
-    ttl2 = Expiration.rebase_expiration(exp2, stop_time, restart_time)
-    assert Expiration.after?(exp2, exp1)
-    assert ttl1 == restart_time + 90
-    assert ttl2 <= restart_time + 190
-  end
-
   test "recovering" do
     work_list =
       Jackalope.PersistentWorkList.new(
-        expiration_fn: fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
         max_size: 10,
         data_dir: "/tmp/jackalope"
       )
+
+    now = Timestamp.now(0)
 
     work_list = WorkList.remove_all(work_list)
 
@@ -185,8 +204,13 @@ defmodule JackalopeTest do
       Enum.reduce(1..15, work_list, fn i, acc ->
         WorkList.push(
           acc,
-          {{:publish, "foo", %{"msg" => "hello #{i}"}, [qos: 1]},
-           [expiration: Expiration.expiration(1_000)]}
+          %Item{
+            topic: "foo",
+            payload: "{\"msg\": \"hello #{i}\"}",
+            expiration: Timestamp.ttl_to_expiration(now, 1000),
+            options: [qos: 1]
+          },
+          now
         )
       end)
 
@@ -197,7 +221,6 @@ defmodule JackalopeTest do
 
     work_list =
       Jackalope.PersistentWorkList.new(
-        expiration_fn: fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
         max_size: 5,
         data_dir: "/tmp/jackalope"
       )

@@ -14,18 +14,21 @@ defmodule Jackalope.Session do
 
   alias __MODULE__, as: State
   alias Jackalope.{TortoiseClient, WorkList}
-  alias Jackalope.WorkList.Expiration
+  alias Jackalope.Item
+  alias Jackalope.Timestamp
 
   require Logger
 
-  @publish_options [:qos, :retain]
-  @work_list_options [:ttl]
+  @typedoc false
+  @type publish_option() :: {:qos, 0..2} | {:ttl, non_neg_integer()}
+
   # One hour
   @default_ttl_msecs 3_600_000
 
   defstruct connection_status: :offline,
             handler: nil,
-            work_list: nil
+            work_list: nil,
+            time_offset: 0
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
@@ -44,13 +47,15 @@ defmodule Jackalope.Session do
   end
 
   ## MQTT-ing
+
   @doc false
-  @spec publish(String.t(), any(), keyword) :: :ok | {:error, :invalid_qos | :invalid_ttl}
-  def publish(topic, payload, opts) when is_binary(topic) do
-    publish_opts = Keyword.take(opts, @publish_options)
-    work_list_options = Keyword.take(opts, @work_list_options)
-    ttl = Keyword.get(work_list_options, :ttl, @default_ttl_msecs)
-    cmd = {:publish, topic, payload, publish_opts}
+  @spec publish(String.t(), binary(), [publish_option()]) ::
+          :ok | {:error, :invalid_qos | :invalid_ttl}
+  def publish(topic, payload, opts \\ []) when is_binary(topic) do
+    ttl = Keyword.get(opts, :ttl, @default_ttl_msecs)
+
+    # Aside from TTL, the only supported option is :qos for now
+    publish_opts = Keyword.take(opts, [:qos])
 
     cond do
       Keyword.get(publish_opts, :qos, 0) not in 0..2 ->
@@ -59,8 +64,8 @@ defmodule Jackalope.Session do
       not (is_integer(ttl) and ttl > 0) ->
         {:error, :invalid_ttl}
 
-      _opts_looks_good! = true ->
-        GenServer.cast(__MODULE__, {:cmd, cmd, work_list_options})
+      _opts_look_good! = true ->
+        GenServer.cast(__MODULE__, {:publish, topic, payload, ttl, publish_opts})
     end
   end
 
@@ -78,14 +83,17 @@ defmodule Jackalope.Session do
 
     work_list =
       Keyword.merge(opts,
-        expiration_fn: fn {_cmd, opts} -> Keyword.fetch!(opts, :expiration) end,
         max_size: max_work_list_size
       )
       |> work_list_mod.new()
 
+    latest_jack_time = WorkList.latest_timestamp(work_list)
+    offset = Timestamp.calculate_offset(latest_jack_time)
+
     initial_state = %State{
       work_list: work_list,
-      handler: handler
+      handler: handler,
+      time_offset: offset
     }
 
     {:ok, initial_state, {:continue, :consume_work_list}}
@@ -123,31 +131,22 @@ defmodule Jackalope.Session do
       {:error, reason} ->
         Logger.warn("Retrying message, failed with reason: #{inspect(reason)}")
 
-        state = %State{
-          state
-          | work_list: WorkList.push(work_list, work_item)
-        }
+        now = jackalope_now(state)
+        state = %State{state | work_list: WorkList.push(work_list, work_item, now)}
 
         {:noreply, state}
     end
   end
 
   @impl GenServer
-  def handle_cast({:cmd, cmd, opts}, %State{work_list: work_list} = state) do
-    # Setup the options for the work order; so far we support time to
-    # live, which allow us to specify the time a work order is allowed
-    # to stay in the work list before it is deemed irrelevant
-    ttl = Keyword.get(opts, :ttl, @default_ttl_msecs)
+  def handle_cast({:publish, topic, payload, ttl, opts}, %State{} = state) do
+    # Convert the TTL to an expiration time and then add the item to the work list
+    now = jackalope_now(state)
+    expiration = Timestamp.ttl_to_expiration(now, ttl)
 
-    expiration = Expiration.expiration(ttl)
+    item = %Item{expiration: expiration, topic: topic, payload: payload, options: opts}
 
-    # Note that we don't really concern ourselves with the order of
-    # the commands; the work_list is a list (and thus a stack) and when
-    # we retry a message it will reenter the work list at the front,
-    # and it could already have messages, etc.
-    work_opts = [expiration: expiration]
-    work_item = {cmd, work_opts}
-    state = %State{state | work_list: WorkList.push(work_list, work_item)}
+    state = %State{state | work_list: WorkList.push(state.work_list, item, now)}
     {:noreply, state, {:continue, :consume_work_list}}
   end
 
@@ -183,19 +182,19 @@ defmodule Jackalope.Session do
       nil ->
         {:noreply, state}
 
-      {cmd, opts} ->
-        expiration = Keyword.fetch!(opts, :expiration)
+      item ->
+        now = jackalope_now(state)
 
-        if expired?(expiration) do
+        if now > item.expiration do
           # drop the message, it is outside of the time to live
           if function_exported?(state.handler, :handle_error, 1) do
-            reason = {:publish_error, cmd, :ttl_expired}
+            reason = {:publish_error, item, :ttl_expired}
             state.handler.handle_error(reason)
           end
 
           {:noreply, state, {:continue, :consume_work_list}}
         else
-          case execute_work(cmd) do
+          case TortoiseClient.publish(item) do
             :ok ->
               # fire and forget work; Publish with QoS=0 is among the work
               # that doesn't produce references
@@ -205,13 +204,13 @@ defmodule Jackalope.Session do
             {:ok, ref} ->
               state = %State{
                 state
-                | work_list: WorkList.pending(work_list, ref)
+                | work_list: WorkList.pending(work_list, ref, now)
               }
 
               {:noreply, state, {:continue, :consume_work_list}}
 
             {:error, reason} ->
-              Logger.warn("[Jackalope] Temporarily failed to execute #{inspect(cmd)}: #{reason}")
+              Logger.warn("[Jackalope] Temporarily failed to execute #{inspect(item)}: #{reason}")
               {:noreply, state}
           end
         end
@@ -220,9 +219,7 @@ defmodule Jackalope.Session do
 
   ### PRIVATE HELPERS --------------------------------------------------
 
-  defp execute_work({:publish, topic, payload, opts}) do
-    TortoiseClient.publish(topic, payload, opts)
+  defp jackalope_now(state) do
+    Timestamp.now(state.time_offset)
   end
-
-  defp expired?(expiration), do: Expiration.after?(Expiration.expiration(0), expiration)
 end

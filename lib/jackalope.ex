@@ -193,7 +193,7 @@ defmodule Jackalope do
   Notice that Jackalope will JSON encode the `payload`; so the data
   should be JSON encodable.
   """
-  @spec publish(String.t(), any, options) ::
+  @spec publish(String.t(), binary(), options) ::
           :ok | {:error, :invalid_qos}
         when options: [
                {:qos, 0..2} | {:retain, boolean} | {:ttl, non_neg_integer}

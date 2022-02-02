@@ -5,8 +5,6 @@ defmodule Jackalope.PersistentWorkList do
 
   use GenServer
 
-  alias Jackalope.WorkList.Expiration
-
   require Logger
 
   @tick_delay 10 * 60 * 1_000
@@ -27,9 +25,7 @@ defmodule Jackalope.PersistentWorkList do
             pending: %{required(reference()) => non_neg_integer()},
             # The file directory persists items waiting execution or pending confirmation of execution.
             data_dir: String.t(),
-            # The function to use to get an expiration given the item
-            expiration_fn: fun(),
-            # Delta between the (approximate) monotonic time at last reboot and the monotomic time at startup
+            # Delta between the (approximate) monotonic time at last reboot and the monotonic time at startup
             delta_time: integer(),
             # The highest index of a recovered item, -1 if none
             recovery_index: integer
@@ -41,7 +37,6 @@ defmodule Jackalope.PersistentWorkList do
               pending: %{},
               data_dir: nil,
               max_size: nil,
-              expiration_fn: nil,
               delta_time: 0,
               recovery_index: -1
   end
@@ -61,8 +56,7 @@ defmodule Jackalope.PersistentWorkList do
     initial_state =
       %State{
         max_size: Keyword.get(opts, :max_size),
-        data_dir: Keyword.fetch!(opts, :data_dir),
-        expiration_fn: Keyword.fetch!(opts, :expiration_fn)
+        data_dir: Keyword.fetch!(opts, :data_dir)
       }
       |> recover()
 
@@ -155,7 +149,7 @@ defmodule Jackalope.PersistentWorkList do
     expired_count =
       Enum.count(
         state.bottom_index..(state.next_index - 1),
-        &expired?(&1, state)
+        &item_vanished?(&1, state)
       )
 
     (state.next_index - state.bottom_index - expired_count)
@@ -189,12 +183,11 @@ defmodule Jackalope.PersistentWorkList do
   defp add_item(item, state) do
     index = state.next_index
     :ok = store_item(item, index, state)
-    expiration = state.expiration_fn.(item)
 
     %State{
       state
       | next_index: index + 1,
-        expirations: Map.put(state.expirations, index, expiration)
+        expirations: Map.put(state.expirations, index, item.expiration)
     }
   end
 
@@ -216,7 +209,7 @@ defmodule Jackalope.PersistentWorkList do
       next_bottom_index > state.next_index ->
         state
 
-      expired?(next_bottom_index, state) ->
+      item_vanished?(next_bottom_index, state) ->
         %State{
           state
           | bottom_index: next_bottom_index
@@ -234,7 +227,7 @@ defmodule Jackalope.PersistentWorkList do
   # No non-pending items?
   defp empty?(state), do: state.bottom_index == state.next_index
 
-  defp expired?(index, state) do
+  defp item_vanished?(index, state) do
     path = item_file_path(index, state)
     not File.exists?(path)
   end
@@ -245,7 +238,7 @@ defmodule Jackalope.PersistentWorkList do
 
   defp store_item(item, index, state) do
     path = item_file_path(index, state)
-    if File.exists?(path), do: raise("Overwritting item file")
+    if File.exists?(path), do: raise("Overwriting item file")
     binary = item_to_binary(item)
     File.write!(path, binary)
   end
@@ -316,7 +309,7 @@ defmodule Jackalope.PersistentWorkList do
   end
 
   defp maybe_expire(index, state) do
-    if expired?(index, state) do
+    if item_vanished?(index, state) do
       state
     else
       expiration = expiration(index, state)
@@ -340,7 +333,7 @@ defmodule Jackalope.PersistentWorkList do
     else
       live_indices =
         state.bottom_index..(state.next_index - 1)
-        |> Enum.reject(&expired?(&1, state))
+        |> Enum.reject(&item_vanished?(&1, state))
         |> Enum.sort(fn index1, index2 ->
           expiration(index1, state) <= expiration(index2, state)
         end)
@@ -394,8 +387,7 @@ defmodule Jackalope.PersistentWorkList do
 
           case stored_item_at(index, state) do
             {:ok, item} ->
-              expiration = state.expiration_fn.(item)
-              [{index, expiration} | acc]
+              [{index, item.expiration} | acc]
 
             {:error, reason} ->
               Logger.warn(
