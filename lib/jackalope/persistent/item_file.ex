@@ -13,9 +13,26 @@ defmodule Jackalope.Persistent.ItemFile do
   """
   @spec save(map(), Item.t()) :: :ok
   def save(state, item) do
-    path = item_file_path(state.data_dir, item.id)
-    binary = item_to_binary(item)
-    File.write!(path, binary)
+    contents = item_to_binary(item)
+    write!(state.data_dir, item_filename(item.id), contents)
+  end
+
+  defp write!(data_dir, filename, contents) do
+    path = Path.join(data_dir, filename)
+    write_options = [:sync]
+
+    case File.write(path, contents, write_options) do
+      :ok ->
+        :ok
+
+      _error ->
+        # Try to recover
+        #   1. Maybe the parent directory doesn't exist
+        #   2. Maybe there's a file in the way
+        File.mkdir_p!(data_dir)
+        _ = File.rm(path)
+        File.write!(path, contents, write_options)
+    end
   end
 
   @doc """
@@ -23,7 +40,7 @@ defmodule Jackalope.Persistent.ItemFile do
   """
   @spec load(map(), non_neg_integer()) :: {:ok, Item.t()} | :error
   def load(state, id) do
-    path = item_file_path(state.data_dir, id)
+    path = Path.join(state.data_dir, item_filename(id))
 
     with {:ok, binary} <- File.read(path),
          {:ok, item} <- item_from_binary(binary),
@@ -55,7 +72,7 @@ defmodule Jackalope.Persistent.ItemFile do
   """
   @spec delete(map(), non_neg_integer()) :: :ok
   def delete(state, id) when id >= 0 do
-    path = item_file_path(state.data_dir, id)
+    path = Path.join(state.data_dir, item_filename(id))
     _ = File.rm(path)
     :ok
   end
@@ -65,7 +82,7 @@ defmodule Jackalope.Persistent.ItemFile do
   """
   @spec exists?(map(), non_neg_integer()) :: boolean()
   def exists?(state, id) when id >= 0 do
-    path = item_file_path(state.data_dir, id)
+    path = Path.join(state.data_dir, item_filename(id))
     File.exists?(path)
   end
 
@@ -73,8 +90,8 @@ defmodule Jackalope.Persistent.ItemFile do
     false
   end
 
-  defp item_file_path(data_dir, id) when is_integer(id) and id >= 0 do
-    Path.join(data_dir, "#{id}.item")
+  defp item_filename(id) when is_integer(id) and id >= 0 do
+    "#{id}.item"
   end
 
   defp item_from_binary(binary) do
