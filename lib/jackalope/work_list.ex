@@ -11,8 +11,8 @@ defprotocol Jackalope.WorkList do
   @doc """
   Read the latest Jackalope timestamp that was used
   """
-  @spec latest_timestamp(work_list()) :: Timestamp.t()
-  def latest_timestamp(work_list)
+  @spec latest_known_state(work_list()) :: %{timestamp: Timestamp.t(), id: non_neg_integer()}
+  def latest_known_state(work_list)
 
   @doc "Push an item on the work list"
   @spec push(work_list(), Item.t(), Timestamp.t()) :: work_list()

@@ -83,10 +83,11 @@ defmodule JackalopeTest do
       work_list = get_session_work_list()
 
       work_list =
-        Enum.reduce(1..15, work_list, fn i, acc ->
+        Enum.reduce(0..14, work_list, fn i, acc ->
           WorkList.push(
             acc,
             %Item{
+              id: i,
               topic: "foo",
               payload: "{\"msg\": \"hello #{i}\"}",
               expiration: Timestamp.ttl_to_expiration(now, @one_day),
@@ -108,10 +109,11 @@ defmodule JackalopeTest do
       work_list = get_session_work_list()
 
       work_list =
-        Enum.reduce(1..5, work_list, fn i, acc ->
+        Enum.reduce(0..4, work_list, fn i, acc ->
           WorkList.push(
             acc,
             %Item{
+              id: i,
               topic: "foo",
               payload: "{\"msg\": \"hello #{i}\"}",
               expiration: Timestamp.ttl_to_expiration(now, @one_day),
@@ -142,10 +144,11 @@ defmodule JackalopeTest do
       work_list = get_session_work_list()
 
       work_list =
-        Enum.reduce(1..15, work_list, fn i, acc ->
+        Enum.reduce(0..14, work_list, fn i, acc ->
           WorkList.push(
             acc,
             %Item{
+              id: i,
               topic: "foo",
               payload: "{\"msg\": \"hello #{i}\"}",
               expiration: Timestamp.ttl_to_expiration(now, @one_day),
@@ -167,10 +170,11 @@ defmodule JackalopeTest do
       work_list = get_session_work_list()
 
       work_list =
-        Enum.reduce(1..5, work_list, fn i, acc ->
+        Enum.reduce(0..4, work_list, fn i, acc ->
           WorkList.push(
             acc,
             %Item{
+              id: i,
               topic: "foo",
               payload: "{\"msg\": \"hello #{i}\"}",
               expiration: Timestamp.ttl_to_expiration(now, @one_day),
@@ -201,10 +205,11 @@ defmodule JackalopeTest do
     work_list = WorkList.remove_all(work_list)
 
     work_list =
-      Enum.reduce(1..15, work_list, fn i, acc ->
+      Enum.reduce(0..14, work_list, fn i, acc ->
         WorkList.push(
           acc,
           %Item{
+            id: i,
             topic: "foo",
             payload: "{\"msg\": \"hello #{i}\"}",
             expiration: Timestamp.ttl_to_expiration(now, 1000),

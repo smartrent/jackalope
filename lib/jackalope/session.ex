@@ -33,7 +33,8 @@ defmodule Jackalope.Session do
   defstruct connection_status: :offline,
             handler: nil,
             work_list: nil,
-            time_offset: 0
+            time_offset: 0,
+            next_id: 0
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
@@ -92,13 +93,14 @@ defmodule Jackalope.Session do
       )
       |> work_list_mod.new()
 
-    latest_jack_time = WorkList.latest_timestamp(work_list)
-    offset = Timestamp.calculate_offset(latest_jack_time)
+    latest_state = WorkList.latest_known_state(work_list)
+    offset = Timestamp.calculate_offset(latest_state.timestamp)
 
     initial_state = %State{
       work_list: work_list,
       handler: handler,
-      time_offset: offset
+      time_offset: offset,
+      next_id: latest_state.id
     }
 
     # Schedule a sync immediately since it could be that recovery or first time
@@ -154,9 +156,22 @@ defmodule Jackalope.Session do
     now = jackalope_now(state)
     expiration = Timestamp.ttl_to_expiration(now, ttl)
 
-    item = %Item{expiration: expiration, topic: topic, payload: payload, options: opts}
+    id = state.next_id
 
-    state = %State{state | work_list: WorkList.push(state.work_list, item, now)}
+    item = %Item{
+      id: id,
+      expiration: expiration,
+      topic: topic,
+      payload: payload,
+      options: opts
+    }
+
+    state = %State{
+      state
+      | next_id: id + 1,
+        work_list: WorkList.push(state.work_list, item, now)
+    }
+
     {:noreply, state, {:continue, :consume_work_list}}
   end
 

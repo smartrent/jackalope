@@ -11,9 +11,9 @@ defmodule Jackalope.Persistent.ItemFile do
 
   The item is persisted at the specified index.
   """
-  @spec save(map(), integer(), Item.t()) :: :ok
-  def save(state, index, item) do
-    path = item_file_path(index, state)
+  @spec save(map(), Item.t()) :: :ok
+  def save(state, item) do
+    path = item_file_path(state.data_dir, item.id)
     binary = item_to_binary(item)
     File.write!(path, binary)
   end
@@ -21,15 +21,15 @@ defmodule Jackalope.Persistent.ItemFile do
   @doc """
   Load the item at an index
   """
-  @spec load(map(), integer()) :: {:ok, Item.t()} | :error
-  def load(state, index) do
-    path = item_file_path(index, state)
+  @spec load(map(), non_neg_integer()) :: {:ok, Item.t()} | :error
+  def load(state, id) do
+    path = item_file_path(state.data_dir, id)
 
     case File.read(path) do
       {:ok, binary} ->
         item_from_binary(binary)
 
-      {:error, :not_found} ->
+      {:error, :enoent} ->
         Logger.warn("[Jackalope] File not found #{inspect(path)}}")
 
         :error
@@ -41,9 +41,9 @@ defmodule Jackalope.Persistent.ItemFile do
 
   The deletion is best-effort. Errors are ignored.
   """
-  @spec delete(map(), integer()) :: :ok
-  def delete(state, index) do
-    path = item_file_path(index, state)
+  @spec delete(map(), non_neg_integer()) :: :ok
+  def delete(state, id) when id >= 0 do
+    path = item_file_path(state.data_dir, id)
     _ = File.rm(path)
     :ok
   end
@@ -51,14 +51,18 @@ defmodule Jackalope.Persistent.ItemFile do
   @doc """
   Return whether there's anything stored for the specified index
   """
-  @spec exists?(map(), integer()) :: boolean()
-  def exists?(state, index) do
-    path = item_file_path(index, state)
+  @spec exists?(map(), non_neg_integer()) :: boolean()
+  def exists?(state, id) when id >= 0 do
+    path = item_file_path(state.data_dir, id)
     File.exists?(path)
   end
 
-  defp item_file_path(index, %{data_dir: data_dir}) do
-    Path.join(data_dir, "#{index}.item")
+  def exists?(_state, _id) do
+    false
+  end
+
+  defp item_file_path(data_dir, id) when is_integer(id) and id >= 0 do
+    Path.join(data_dir, "#{id}.item")
   end
 
   defp item_from_binary(binary) do

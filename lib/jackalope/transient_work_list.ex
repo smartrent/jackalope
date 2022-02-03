@@ -122,14 +122,17 @@ defimpl Jackalope.WorkList, for: Jackalope.TransientWorkList do
   require Logger
 
   @impl Jackalope.WorkList
-  def latest_timestamp(_work_list) do
+  def latest_known_state(_work_list) do
     # Transient work lists aren't persisted across restarts, so
     # follow monotonic time. This will result in Jackalope timestamps
     # roughly being the same as `System.monotonic_time/1`. The rough
     # part is that the offset calculation could be a small number of milliseconds
     # off based on how long it takes to get from here to the offset calculation
     # code. That doesn't changing anything, though.
-    System.monotonic_time(:millisecond)
+    latest_jackalope_timestamp = System.monotonic_time(:millisecond)
+    latest_id = 0
+
+    %{timestamp: latest_jackalope_timestamp, id: latest_id}
   end
 
   @impl Jackalope.WorkList

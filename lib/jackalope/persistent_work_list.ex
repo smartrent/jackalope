@@ -71,8 +71,8 @@ defmodule Jackalope.PersistentWorkList do
     {:reply, peek_oldest(state), state}
   end
 
-  def handle_call(:latest_timestamp, _from, state) do
-    {:reply, state.persisted_timestamp, state}
+  def handle_call(:latest_known_state, _from, state) do
+    {:reply, %{timestamp: state.persisted_timestamp, id: state.next_index}, state}
   end
 
   def handle_call({:push, item, now}, _from, state) do
@@ -168,13 +168,12 @@ defmodule Jackalope.PersistentWorkList do
   end
 
   defp add_item(item, state) do
-    index = state.next_index
-    ItemFile.save(state, index, item)
+    ItemFile.save(state, item)
 
     %State{
       state
-      | next_index: index + 1,
-        expirations: Map.put(state.expirations, index, item.expiration)
+      | expirations: Map.put(state.expirations, item.id, item.expiration),
+        next_index: max(state.next_index, item.id + 1)
     }
   end
 
@@ -390,8 +389,8 @@ end
 
 defimpl Jackalope.WorkList, for: Jackalope.PersistentWorkList do
   @impl Jackalope.WorkList
-  def latest_timestamp(work_list) do
-    GenServer.call(work_list.pid, :latest_timestamp)
+  def latest_known_state(work_list) do
+    GenServer.call(work_list.pid, :latest_known_state)
   end
 
   @impl Jackalope.WorkList
