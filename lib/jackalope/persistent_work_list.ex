@@ -63,6 +63,31 @@ defmodule Jackalope.PersistentWorkList do
         ref_to_index: %{}
     }
   end
+
+  @spec check_consistency(t()) :: :ok
+  def check_consistency(work_list) do
+    count = Enum.count(work_list.items_to_send) + Enum.count(work_list.items_in_transit)
+    unless count == work_list.count, do: raise("Count mismatch")
+
+    Enum.each(work_list.items_to_send, fn item ->
+      {:ok, persisted_item} = ItemFile.load(work_list, item.id)
+
+      unless persisted_item == item,
+        do: raise("To send item mismatch: #{inspect(persisted_item)} (expected #{inspect(item)})")
+    end)
+
+    Enum.each(work_list.items_in_transit, fn {_ref, item} ->
+      {:ok, persisted_item} = ItemFile.load(work_list, item.id)
+
+      unless persisted_item == item,
+        do:
+          raise(
+            "In transit item mismatch: #{inspect(persisted_item)} (expected #{inspect(item)})"
+          )
+    end)
+
+    :ok
+  end
 end
 
 defimpl Jackalope.WorkList, for: Jackalope.PersistentWorkList do

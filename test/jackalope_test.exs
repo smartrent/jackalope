@@ -204,6 +204,8 @@ defmodule JackalopeTest do
 
     work_list = WorkList.remove_all(work_list)
 
+    Jackalope.PersistentWorkList.check_consistency(work_list)
+
     work_list =
       Enum.reduce(0..14, work_list, fn i, acc ->
         WorkList.push(
@@ -219,12 +221,16 @@ defmodule JackalopeTest do
         )
       end)
 
+    Jackalope.PersistentWorkList.check_consistency(work_list)
+
     assert count(work_list) == 10
     ref = make_ref()
 
     _work_list =
       WorkList.pending(work_list, ref, now)
       |> WorkList.sync(now)
+
+    Jackalope.PersistentWorkList.check_consistency(work_list)
 
     new_work_list =
       Jackalope.PersistentWorkList.new(
@@ -233,6 +239,7 @@ defmodule JackalopeTest do
       )
 
     assert count(new_work_list) == 5
+    Jackalope.PersistentWorkList.check_consistency(new_work_list)
   end
 
   defp count(work_list) do
