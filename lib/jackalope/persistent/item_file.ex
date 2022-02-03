@@ -25,13 +25,13 @@ defmodule Jackalope.Persistent.ItemFile do
   def load(state, id) do
     path = item_file_path(state.data_dir, id)
 
-    case File.read(path) do
-      {:ok, binary} ->
-        item_from_binary(binary)
-
-      {:error, :enoent} ->
-        Logger.warn("[Jackalope] File not found #{inspect(path)}}")
-
+    with {:ok, binary} <- File.read(path),
+         {:ok, item} <- item_from_binary(binary),
+         ^id <- item.id do
+      {:ok, item}
+    else
+      _ ->
+        Logger.warn("[Jackalope] File #{inspect(path)}} not found or corrupt.")
         :error
     end
   end

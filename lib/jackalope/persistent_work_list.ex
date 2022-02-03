@@ -3,143 +3,158 @@ defmodule Jackalope.PersistentWorkList do
   A work list whose work items are persisted as individual files.
   """
 
-  use GenServer
-
   alias Jackalope.Persistent.ItemFile
   alias Jackalope.Persistent.Meta
+  alias Jackalope.Persistent.Recovery
 
   require Logger
 
-  defstruct [:pid]
-  @type t() :: %__MODULE__{pid: pid()}
+  defstruct bottom_index: 0,
+            next_index: 0,
+            expirations: %{},
+            pending: %{},
+            data_dir: nil,
+            max_size: nil,
+            persisted_timestamp: 0
 
-  defmodule State do
-    @moduledoc false
-
-    @type t :: %__MODULE__{
-            # The maximum number of items that can be persisted as files
-            max_size: non_neg_integer(),
-            # The lowest index of an unexpired, not-pending item. No pending item has an index >= bottom_index.
-            bottom_index: non_neg_integer(),
-            # The index at which the next item will be pushed.
-            next_index: non_neg_integer(),
-            # Cache of item expiration times for all persisted items (pending and not)
-            expirations: %{required(non_neg_integer()) => integer},
-            # Indices of pending items mapped by their references.
-            pending: %{required(reference()) => non_neg_integer()},
-            # The file directory persists items waiting execution or pending confirmation of execution.
-            data_dir: String.t(),
-            # The most recently persisted Jackalope timestamp
-            persisted_timestamp: Timestamp.t()
-          }
-
-    defstruct bottom_index: 0,
-              next_index: 0,
-              expirations: %{},
-              pending: %{},
-              data_dir: nil,
-              max_size: nil,
-              persisted_timestamp: 0
-  end
+  @type t :: %__MODULE__{
+          # The maximum number of items that can be persisted as files
+          max_size: non_neg_integer(),
+          # The lowest index of an unexpired, not-pending item. No pending item has an index >= bottom_index.
+          bottom_index: non_neg_integer(),
+          # The index at which the next item will be pushed.
+          next_index: non_neg_integer(),
+          # Cache of item expiration times for all persisted items (pending and not)
+          expirations: %{required(non_neg_integer()) => integer},
+          # Indices of pending items mapped by their references.
+          pending: %{required(reference()) => non_neg_integer()},
+          # The file directory persists items waiting execution or pending confirmation of execution.
+          data_dir: String.t(),
+          # The most recently persisted Jackalope timestamp
+          persisted_timestamp: Timestamp.t()
+        }
 
   @doc "Create a new work list"
   @spec new(Keyword.t()) :: t()
   def new(opts \\ []) do
     Logger.info("[Jackalope] Starting #{__MODULE__} with #{inspect(opts)}")
-    {:ok, pid} = GenServer.start_link(__MODULE__, opts)
-    %__MODULE__{pid: pid}
-  end
 
-  @impl GenServer
-  def init(opts) do
-    initial_state = %State{
+    initial_state = %__MODULE__{
       max_size: Keyword.get(opts, :max_size),
       data_dir: Keyword.fetch!(opts, :data_dir)
     }
 
-    state = recover(initial_state)
-
-    {:ok, state}
+    Recovery.recover(initial_state)
   end
 
-  @impl GenServer
-  def handle_call(:info, _from, state) do
-    {:reply, info(state), state}
+  @spec reset_state(t()) :: t()
+  def reset_state(work_list) do
+    %{
+      work_list
+      | bottom_index: 0,
+        next_index: 0,
+        pending: %{},
+        expirations: %{}
+    }
+  end
+end
+
+defimpl Jackalope.WorkList, for: Jackalope.PersistentWorkList do
+  alias Jackalope.Persistent.ItemFile
+  alias Jackalope.Persistent.Meta
+
+  require Logger
+
+  @impl Jackalope.WorkList
+  def info(work_list) do
+    %{count_waiting: count(work_list), count_pending: count_pending(work_list)}
   end
 
-  def handle_call(:peek, _from, state) do
-    {:reply, peek_oldest(state), state}
+  @impl Jackalope.WorkList
+  def peek(work_list) do
+    # Peek at oldest non-pending work item
+    if empty?(work_list) do
+      nil
+    else
+      # If this fails, let it crash
+      {:ok, item} = ItemFile.load(work_list, work_list.bottom_index)
+      item
+    end
   end
 
-  def handle_call(:latest_known_state, _from, state) do
-    {:reply, %{timestamp: state.persisted_timestamp, id: state.next_index}, state}
+  @impl Jackalope.WorkList
+  def latest_known_state(work_list) do
+    %{timestamp: work_list.persisted_timestamp, id: work_list.next_index}
   end
 
-  def handle_call({:push, item, now}, _from, state) do
-    updated_state = add_item(item, state)
-    {:reply, :ok, bound_items(updated_state, now)}
+  @impl Jackalope.WorkList
+  def push(work_list, item, now) do
+    work_list
+    |> add_item(item)
+    |> bound_items(now)
   end
 
-  def handle_call(:pop, _from, state) do
-    updated_state = remove_oldest(state)
-    {:reply, :ok, updated_state}
+  @impl Jackalope.WorkList
+  def pop(work_list) do
+    index = work_list.bottom_index
+    ItemFile.delete(work_list, index)
+
+    %{work_list | expirations: Map.delete(work_list.expirations, index)}
+    |> move_bottom_index()
   end
 
-  def handle_call({:sync, now}, _from, state) do
-    Meta.save(state, now)
-    {:reply, :ok, %{state | persisted_timestamp: now}}
+  @impl Jackalope.WorkList
+  def sync(work_list, now) do
+    Meta.save(work_list, now)
+    %{work_list | persisted_timestamp: now}
   end
 
-  # The item becoming pending is always the one at bottom index
-  def handle_call({:pending, ref, _now}, _from, state) do
-    updated_state =
-      %State{state | pending: Map.put(state.pending, ref, state.bottom_index)}
-      |> move_bottom_index()
-
-    {:reply, :ok, updated_state}
+  @impl Jackalope.WorkList
+  def pending(work_list, ref, _now) do
+    # The item becoming pending is always the one at bottom index
+    %{work_list | pending: Map.put(work_list.pending, ref, work_list.bottom_index)}
+    |> move_bottom_index()
   end
 
-  def handle_call({:done, ref}, _from, state) do
-    case Map.get(state.pending, ref) do
+  @impl Jackalope.WorkList
+  def done(work_list, ref) do
+    case Map.get(work_list.pending, ref) do
       nil ->
         Logger.warn(
           "[Jackalope] Unknown pending work list item reference #{inspect(ref)}. Ignored."
         )
 
-        {:reply, nil, state}
+        {work_list, nil}
 
       index ->
-        {:ok, item} = ItemFile.load(state, index)
-        ItemFile.delete(state, index)
-        updated_state = %State{state | pending: Map.delete(state.pending, ref)}
+        {:ok, item} = ItemFile.load(work_list, index)
+        ItemFile.delete(work_list, index)
+        updated_work_list = %{work_list | pending: Map.delete(work_list.pending, ref)}
 
-        {:reply, item, updated_state}
+        {updated_work_list, item}
     end
   end
 
-  def handle_call(:remove_all, _from, state) do
-    {:ok, _} = File.rm_rf(state.data_dir)
-    :ok = File.mkdir_p!(state.data_dir)
+  @impl Jackalope.WorkList
+  def remove_all(work_list) do
+    _ = File.rm_rf(work_list.data_dir)
+    :ok = File.mkdir_p!(work_list.data_dir)
 
-    {:reply, :ok, reset_state(state)}
+    Jackalope.PersistentWorkList.reset_state(work_list)
   end
 
-  def handle_call(:reset_pending, _from, state) do
+  @impl Jackalope.WorkList
+  def reset_pending(work_list) do
     bottom_index =
-      case bottom_pending_index(state) do
-        nil -> state.bottom_index
+      case bottom_pending_index(work_list) do
+        nil -> work_list.bottom_index
         index -> index
       end
 
-    {:reply, :ok, %State{state | bottom_index: bottom_index, pending: %{}}}
+    %{work_list | bottom_index: bottom_index, pending: %{}}
   end
 
   ## PRIVATE
-
-  defp info(state) do
-    %{count_waiting: count(state), count_pending: count_pending(state)}
-  end
-
   defp count(state) do
     expired_count =
       Enum.count(
@@ -156,33 +171,14 @@ defmodule Jackalope.PersistentWorkList do
   # Ought to be the same as Enum.count(state.expirations)
   defp persisted_count(state), do: count(state) + count_pending(state)
 
-  # Peek at oldest non-pending work item
-  defp peek_oldest(state) do
-    if empty?(state) do
-      nil
-    else
-      # If this fails, let it crash
-      {:ok, item} = ItemFile.load(state, state.bottom_index)
-      item
-    end
-  end
-
-  defp add_item(item, state) do
+  defp add_item(state, item) do
     ItemFile.save(state, item)
 
-    %State{
+    %{
       state
       | expirations: Map.put(state.expirations, item.id, item.expiration),
         next_index: max(state.next_index, item.id + 1)
     }
-  end
-
-  defp remove_oldest(state) do
-    index = state.bottom_index
-    ItemFile.delete(state, index)
-
-    %State{state | expirations: Map.delete(state.expirations, index)}
-    |> move_bottom_index()
   end
 
   # Move bottom index up until it is not an expired
@@ -194,17 +190,11 @@ defmodule Jackalope.PersistentWorkList do
         state
 
       item_vanished?(next_bottom_index, state) ->
-        %State{
-          state
-          | bottom_index: next_bottom_index
-        }
+        %{state | bottom_index: next_bottom_index}
         |> move_bottom_index()
 
       next_bottom_index <= state.next_index ->
-        %State{
-          state
-          | bottom_index: next_bottom_index
-        }
+        %{state | bottom_index: next_bottom_index}
     end
   end
 
@@ -297,7 +287,7 @@ defmodule Jackalope.PersistentWorkList do
     updated_state =
       cond do
         pending_item?(index, state) ->
-          %State{state | pending: Map.delete(state.pending, index)}
+          %{state | pending: Map.delete(state.pending, index)}
 
         index == state.bottom_index ->
           move_bottom_index(state)
@@ -306,142 +296,8 @@ defmodule Jackalope.PersistentWorkList do
           state
       end
 
-    %State{updated_state | expirations: Map.delete(state.expirations, index)}
+    %{updated_state | expirations: Map.delete(state.expirations, index)}
   end
 
   defp pending_item?(index, state), do: Map.has_key?(state.pending, index)
-
-  defp restore_metadata(state) do
-    case Meta.load(state) do
-      {:ok, meta} ->
-        %{state | persisted_timestamp: meta.latest_timestamp}
-
-      _ ->
-        # Initialize defaults
-        %{state | persisted_timestamp: 0}
-    end
-  end
-
-  defp recover(state) do
-    state = restore_metadata(state)
-
-    :ok = File.mkdir_p!(state.data_dir)
-
-    item_files =
-      File.ls!(state.data_dir)
-      |> Enum.filter(&Regex.match?(~r/.*\.item/, &1))
-
-    expirations =
-      item_files
-      |> Enum.reduce(
-        [],
-        fn item_file, acc ->
-          index = index_of_item_file(item_file)
-
-          case ItemFile.load(state, index) do
-            {:ok, item} ->
-              [{index, item.expiration} | acc]
-
-            :error ->
-              Logger.warn("Failed to recover item in #{inspect(item_file)}. Removing it.")
-
-              ItemFile.delete(state, index)
-              acc
-          end
-        end
-      )
-      |> Enum.into(%{})
-
-    item_indices = Map.keys(expirations)
-
-    if Enum.empty?(item_files) do
-      reset_state(state)
-    else
-      bottom_index = Enum.min(item_indices)
-      last_index = Enum.max(item_indices)
-
-      %State{
-        state
-        | bottom_index: bottom_index,
-          next_index: last_index + 1,
-          expirations: expirations
-      }
-      |> bound_items(state.persisted_timestamp)
-    end
-  end
-
-  defp index_of_item_file(item_file) do
-    [index_s, _] = String.split(item_file, ".")
-    {index, _} = Integer.parse(index_s)
-    index
-  end
-
-  defp reset_state(state) do
-    %State{
-      state
-      | bottom_index: 0,
-        next_index: 0,
-        pending: %{},
-        expirations: %{}
-    }
-  end
-end
-
-defimpl Jackalope.WorkList, for: Jackalope.PersistentWorkList do
-  @impl Jackalope.WorkList
-  def latest_known_state(work_list) do
-    GenServer.call(work_list.pid, :latest_known_state)
-  end
-
-  @impl Jackalope.WorkList
-  def peek(work_list) do
-    GenServer.call(work_list.pid, :peek)
-  end
-
-  @impl Jackalope.WorkList
-  def push(work_list, item, now) do
-    :ok = GenServer.call(work_list.pid, {:push, item, now})
-    work_list
-  end
-
-  @impl Jackalope.WorkList
-  def pop(work_list) do
-    :ok = GenServer.call(work_list.pid, :pop)
-    work_list
-  end
-
-  @impl Jackalope.WorkList
-  def pending(work_list, ref, now) do
-    :ok = GenServer.call(work_list.pid, {:pending, ref, now})
-    work_list
-  end
-
-  @impl Jackalope.WorkList
-  def sync(work_list, now) do
-    :ok = GenServer.call(work_list.pid, {:sync, now})
-    work_list
-  end
-
-  @impl Jackalope.WorkList
-  def reset_pending(work_list) do
-    :ok = GenServer.call(work_list.pid, :reset_pending)
-    work_list
-  end
-
-  @impl Jackalope.WorkList
-  def done(work_list, ref) do
-    item = GenServer.call(work_list.pid, {:done, ref})
-    {work_list, item}
-  end
-
-  @impl Jackalope.WorkList
-  def info(work_list) do
-    GenServer.call(work_list.pid, :info)
-  end
-
-  @impl Jackalope.WorkList
-  def remove_all(work_list) do
-    :ok = GenServer.call(work_list.pid, :remove_all)
-    work_list
-  end
 end

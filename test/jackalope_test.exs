@@ -222,19 +222,17 @@ defmodule JackalopeTest do
     assert count(work_list) == 10
     ref = make_ref()
 
-    work_list =
+    _work_list =
       WorkList.pending(work_list, ref, now)
       |> WorkList.sync(now)
 
-    :ok = GenServer.stop(work_list.pid)
-
-    work_list =
+    new_work_list =
       Jackalope.PersistentWorkList.new(
         max_size: 5,
         data_dir: "/tmp/jackalope"
       )
 
-    assert count(work_list) == 5
+    assert count(new_work_list) == 5
   end
 
   defp count(work_list) do
