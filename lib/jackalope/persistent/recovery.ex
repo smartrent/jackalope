@@ -1,5 +1,4 @@
 defmodule Jackalope.Persistent.Recovery do
-  alias Jackalope.Item
   alias Jackalope.Persistent.ItemFile
   alias Jackalope.Persistent.Meta
   alias Jackalope.PersistentWorkList
@@ -7,7 +6,7 @@ defmodule Jackalope.Persistent.Recovery do
   require Logger
 
   @spec recover(PersistentWorkList.t()) :: PersistentWorkList.t()
-  def recover(state) do
+  def recover(%PersistentWorkList{} = state) do
     state = restore_metadata(state)
 
     :ok = File.mkdir_p!(state.data_dir)
@@ -21,14 +20,19 @@ defmodule Jackalope.Persistent.Recovery do
     recovery_state =
       Enum.reduce(
         item_files,
-        %{items: [], count: 0},
+        %{items: [], count: 0, highest_id: 0},
         fn item_file, acc ->
           index = index_of_item_file(item_file)
 
           with {:ok, item} <- ItemFile.load(state, index),
                true <- acc.count < state.max_size,
                true <- item.expiration > now do
-            %{acc | items: [item | acc.items], count: acc.count + 1}
+            %{
+              acc
+              | items: [item | acc.items],
+                count: acc.count + 1,
+                highest_id: max(item.id, acc.highest_id)
+            }
           else
             _ ->
               Logger.warn("Not recovering item in #{inspect(item_file)}. Removing it.")
@@ -39,21 +43,14 @@ defmodule Jackalope.Persistent.Recovery do
         end
       )
 
-    expirations = for item <- recovery_state.items, into: %{}, do: {item.id, item.expiration}
-
-    item_indices = Map.keys(expirations)
-
-    if Enum.empty?(item_indices) do
+    if recovery_state.count == 0 do
       PersistentWorkList.reset_state(state)
     else
-      bottom_index = Enum.min(item_indices)
-      last_index = Enum.max(item_indices)
-
       %{
         state
-        | bottom_index: bottom_index,
-          next_index: last_index + 1,
-          expirations: expirations
+        | next_index: recovery_state.highest_id + 1,
+          items_to_send: recovery_state.items,
+          count: recovery_state.count
       }
     end
   end

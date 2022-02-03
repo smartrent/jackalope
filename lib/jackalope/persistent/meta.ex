@@ -8,17 +8,16 @@ defmodule Jackalope.Persistent.Meta do
   require Logger
 
   @meta_version 1
-  @meta_file_length 32
+  @meta_file_length 24
 
   @type metadata() :: %{
           latest_timestamp: Timestamp.t(),
-          bottom_index: non_neg_integer(),
           next_index: non_neg_integer()
         }
 
   @spec save(map(), Timestamp.t()) :: :ok
   def save(state, now) do
-    contents = encode(now, state.bottom_index, state.next_index)
+    contents = encode(now, state.next_index)
 
     write!(state.data_dir, "meta", contents)
   end
@@ -62,16 +61,12 @@ defmodule Jackalope.Persistent.Meta do
     end
   end
 
-  defp encode(latest_timestamp, bottom_index, next_index) do
-    <<@meta_version::8, 0::56, latest_timestamp::signed-64, bottom_index::64, next_index::64>>
+  defp encode(latest_timestamp, next_index) do
+    <<@meta_version::8, 0::56, latest_timestamp::signed-64, next_index::64>>
   end
 
-  defp decode(
-         <<@meta_version::8, 0::56, latest_timestamp::signed-64, bottom_index::64,
-           next_index::64>>
-       ) do
-    {:ok,
-     %{latest_timestamp: latest_timestamp, bottom_index: bottom_index, next_index: next_index}}
+  defp decode(<<@meta_version::8, 0::56, latest_timestamp::signed-64, next_index::64>>) do
+    {:ok, %{latest_timestamp: latest_timestamp, next_index: next_index}}
   end
 
   defp decode(_other) do
