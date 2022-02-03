@@ -1,10 +1,114 @@
 defmodule Jackalope.Persistent.ItemFileTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
 
+  alias Jackalope.{Item, Timestamp}
   alias Jackalope.Persistent.ItemFile
+  alias Jackalope.PersistentWorkList
+
   doctest ItemFile
 
-  # TODO - test reading and writing Items to files and
-  #        that everything does the expected thing when
-  #        the files are missing or corrupt.
+  setup do
+    dir = "/tmp/jackalope"
+    File.rm_rf!(dir)
+    :ok = File.mkdir_p!(dir)
+
+    work_list =
+      PersistentWorkList.new(max_size: 10, data_dir: dir) |> PersistentWorkList.reset_state()
+
+    {:ok, work_list: work_list}
+  end
+
+  test "saving and loading", context do
+    work_list = context.work_list
+    now = Timestamp.now(0)
+    id = 1
+
+    item = %Item{
+      id: id,
+      topic: "foo",
+      payload: "{\"msg\": \"hello #{id}\"}",
+      expiration: Timestamp.ttl_to_expiration(now, 1_000),
+      options: [qos: 1]
+    }
+
+    assert :ok = ItemFile.save(work_list, item)
+    assert File.exists?(Path.join(work_list.data_dir, "#{id}.item"))
+
+    {:ok, loaded_item} = ItemFile.load(work_list, id)
+    assert Map.equal?(item, loaded_item)
+  end
+
+  test "detecting invalid item on load", context do
+    work_list = context.work_list
+    now = Timestamp.now(0)
+
+    id = 1
+
+    item = %Item{
+      id: id,
+      topic: %{},
+      payload: "{\"msg\": \"hello #{id}\"}",
+      expiration: Timestamp.ttl_to_expiration(now, 1_000),
+      options: [qos: 1]
+    }
+
+    assert :ok = ItemFile.save(work_list, item)
+    :error = ItemFile.load(work_list, id)
+
+    id = 2
+
+    item = %Item{
+      id: id,
+      topic: "foo",
+      payload: %{msg: "hello #{id}"},
+      expiration: Timestamp.ttl_to_expiration(now, 1_000),
+      options: [qos: 1]
+    }
+
+    assert :ok = ItemFile.save(work_list, item)
+    :error = ItemFile.load(work_list, id)
+
+    id = 3
+
+    item = %Item{
+      id: id,
+      topic: "foo",
+      payload: "{\"msg\": \"hello #{id}\"}",
+      expiration: :infinity,
+      options: [qos: 1]
+    }
+
+    assert :ok = ItemFile.save(work_list, item)
+    :error = ItemFile.load(work_list, id)
+
+    id = 4
+
+    item = %Item{
+      id: id,
+      topic: "foo",
+      payload: "{\"msg\": \"hello #{id}\"}",
+      expiration: Timestamp.ttl_to_expiration(now, 1_000),
+      options: %{qos: 1}
+    }
+
+    assert :ok = ItemFile.save(work_list, item)
+    :error = ItemFile.load(work_list, id)
+  end
+
+  test "missing dir created on save", context do
+    work_list = context.work_list
+    now = Timestamp.now(0)
+    id = 1
+
+    item = %Item{
+      id: id,
+      topic: "foo",
+      payload: "{\"msg\": \"hello #{id}\"}",
+      expiration: Timestamp.ttl_to_expiration(now, 1_000),
+      options: [qos: 1]
+    }
+
+    File.rmdir!(work_list.data_dir)
+    assert :ok = ItemFile.save(work_list, item)
+  end
 end
