@@ -25,7 +25,7 @@ defmodule Jackalope.Persistent.ItemFileTest do
     assert File.exists?(Path.join(work_list.data_dir, "#{id}.item"))
 
     {:ok, loaded_item} = ItemFile.load(work_list, id)
-    assert Map.equal?(item, loaded_item)
+    assert item == loaded_item
   end
 
   test "detecting invalid item on load", context do
@@ -34,6 +34,7 @@ defmodule Jackalope.Persistent.ItemFileTest do
 
     id = 1
 
+    # Invalid topic
     item = %Item{
       id: id,
       topic: %{},
@@ -42,11 +43,12 @@ defmodule Jackalope.Persistent.ItemFileTest do
       options: [qos: 1]
     }
 
-    assert :ok = ItemFile.save(work_list, item)
-    :error = ItemFile.load(work_list, id)
+    assert :ok == ItemFile.save(work_list, item)
+    assert :error == ItemFile.load(work_list, id)
 
     id = 2
 
+    # Invalid payload
     item = %Item{
       id: id,
       topic: "foo",
@@ -55,11 +57,12 @@ defmodule Jackalope.Persistent.ItemFileTest do
       options: [qos: 1]
     }
 
-    assert :ok = ItemFile.save(work_list, item)
-    :error = ItemFile.load(work_list, id)
+    assert :ok == ItemFile.save(work_list, item)
+    assert :error == ItemFile.load(work_list, id)
 
     id = 3
 
+    # Invalid expiration
     item = %Item{
       id: id,
       topic: "foo",
@@ -68,11 +71,12 @@ defmodule Jackalope.Persistent.ItemFileTest do
       options: [qos: 1]
     }
 
-    assert :ok = ItemFile.save(work_list, item)
-    :error = ItemFile.load(work_list, id)
+    assert :ok == ItemFile.save(work_list, item)
+    assert :error == ItemFile.load(work_list, id)
 
     id = 4
 
+    # Invalid options
     item = %Item{
       id: id,
       topic: "foo",
@@ -81,8 +85,12 @@ defmodule Jackalope.Persistent.ItemFileTest do
       options: %{qos: 1}
     }
 
-    assert :ok = ItemFile.save(work_list, item)
-    :error = ItemFile.load(work_list, id)
+    assert :ok == ItemFile.save(work_list, item)
+    assert :error == ItemFile.load(work_list, id)
+
+    # Empty file
+    File.write!(Path.join(work_list.data_dir, "5.item"), "")
+    assert :error == ItemFile.load(work_list, 5)
   end
 
   test "missing dir created on save", context do
