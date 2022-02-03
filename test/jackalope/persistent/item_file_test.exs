@@ -1,25 +1,15 @@
 defmodule Jackalope.Persistent.ItemFileTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias Jackalope.{Item, Timestamp}
   alias Jackalope.Persistent.ItemFile
   alias Jackalope.PersistentWorkList
 
+  @moduletag :tmp_dir
   doctest ItemFile
 
-  setup do
-    dir = "/tmp/jackalope"
-    File.rm_rf!(dir)
-    :ok = File.mkdir_p!(dir)
-
-    work_list =
-      PersistentWorkList.new(max_size: 10, data_dir: dir) |> PersistentWorkList.reset_state()
-
-    {:ok, work_list: work_list}
-  end
-
   test "saving and loading", context do
-    work_list = context.work_list
+    work_list = PersistentWorkList.new(max_size: 10, data_dir: context.tmp_dir)
     now = Timestamp.now(0)
     id = 1
 
@@ -39,7 +29,7 @@ defmodule Jackalope.Persistent.ItemFileTest do
   end
 
   test "detecting invalid item on load", context do
-    work_list = context.work_list
+    work_list = PersistentWorkList.new(max_size: 10, data_dir: context.tmp_dir)
     now = Timestamp.now(0)
 
     id = 1
@@ -96,7 +86,7 @@ defmodule Jackalope.Persistent.ItemFileTest do
   end
 
   test "missing dir created on save", context do
-    work_list = context.work_list
+    work_list = PersistentWorkList.new(max_size: 10, data_dir: context.tmp_dir)
     now = Timestamp.now(0)
     id = 1
 
