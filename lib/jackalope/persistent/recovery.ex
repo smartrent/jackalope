@@ -27,7 +27,7 @@ defmodule Jackalope.Persistent.Recovery do
 
           with {:ok, item} <- ItemFile.load(state, index),
                true <- acc.count < state.max_size,
-               true <- acceptable_item?(item, now) do
+               true <- item.expiration > now do
             %{acc | items: [item | acc.items], count: acc.count + 1}
           else
             _ ->
@@ -57,16 +57,6 @@ defmodule Jackalope.Persistent.Recovery do
       }
     end
   end
-
-  defp acceptable_item?(
-         %Item{expiration: expiration, topic: topic, payload: payload, options: options} = _item,
-         now
-       )
-       when expiration > now and is_binary(topic) and is_binary(payload) and is_list(options) do
-    true
-  end
-
-  defp acceptable_item?(_item, _now), do: false
 
   defp index_of_item_file(item_file) do
     [index_s, _] = String.split(item_file, ".")

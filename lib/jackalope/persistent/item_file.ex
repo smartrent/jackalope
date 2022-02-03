@@ -27,7 +27,7 @@ defmodule Jackalope.Persistent.ItemFile do
 
     with {:ok, binary} <- File.read(path),
          {:ok, item} <- item_from_binary(binary),
-         ^id <- item.id do
+         true <- good_item?(item, id) do
       {:ok, item}
     else
       _ ->
@@ -35,6 +35,18 @@ defmodule Jackalope.Persistent.ItemFile do
         :error
     end
   end
+
+  defp good_item?(
+         %Item{id: id, expiration: expiration, topic: topic, payload: payload, options: options} =
+           _item,
+         id
+       )
+       when is_integer(expiration) and is_binary(topic) and is_binary(payload) and
+              is_list(options) do
+    true
+  end
+
+  defp good_item?(_item, _id), do: false
 
   @doc """
   Delete the item persisted at the specified index
