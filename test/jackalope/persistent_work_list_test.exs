@@ -1,5 +1,5 @@
-defmodule Jackalope.Persistent.PersistentWorkListTest do
-  use ExUnit.Case, async: false
+defmodule Jackalope.PersistentWorkListTest do
+  use ExUnit.Case, async: true
 
   alias Jackalope.{Item, Timestamp, WorkList}
   alias Jackalope.PersistentWorkList
@@ -154,7 +154,6 @@ defmodule Jackalope.Persistent.PersistentWorkListTest do
   end
 
   defp new_pwl(context) do
-    File.rm_rf!(context.tmp_dir)
     PersistentWorkList.new(max_size: 10, data_dir: context.tmp_dir)
   end
 
