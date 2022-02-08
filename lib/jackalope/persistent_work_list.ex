@@ -15,7 +15,6 @@ defmodule Jackalope.PersistentWorkList do
             next_index: 0,
             items_to_send: [],
             items_in_transit: %{},
-            ref_to_index: %{},
             data_dir: nil,
             max_size: nil,
             persisted_timestamp: 0
@@ -30,9 +29,7 @@ defmodule Jackalope.PersistentWorkList do
           # Cache of items
           items_to_send: [Item.t()],
           # Pending items
-          items_in_transit: %{non_neg_integer() => Item.t()},
-          # Indices of items in transit mapped by their references.
-          ref_to_index: %{reference() => non_neg_integer()},
+          items_in_transit: %{reference() => Item.t()},
           # The file directory persists items waiting execution or pending confirmation of execution.
           data_dir: String.t(),
           # The most recently persisted Jackalope timestamp
@@ -59,8 +56,7 @@ defmodule Jackalope.PersistentWorkList do
       | count: 0,
         next_index: 0,
         items_to_send: [],
-        items_in_transit: %{},
-        ref_to_index: %{}
+        items_in_transit: %{}
     }
   end
 
