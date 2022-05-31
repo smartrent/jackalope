@@ -2,7 +2,7 @@ defmodule Jackalope.WorkList.Expiration do
   @moduledoc """
   Common functions for work lists.
   """
-  @type expiration() :: integer | :infinity
+  @type expiration() :: non_neg_integer() | :infinity
 
   @spec now :: integer
   def now(), do: System.monotonic_time(:millisecond)
@@ -12,7 +12,7 @@ defmodule Jackalope.WorkList.Expiration do
 
   @spec expiration(non_neg_integer | :infinity) :: expiration
   def expiration(:infinity), do: :infinity
-  def expiration(ttl), do: now() + ttl
+  def expiration(ttl) when is_integer(ttl), do: now() + ttl
 
   @doc "Does the first expiration come after the second?"
   @spec after?(expiration, expiration) :: boolean
@@ -25,6 +25,6 @@ defmodule Jackalope.WorkList.Expiration do
 
   def rebase_expiration(exp, stop_time, restart_time) do
     delta_now = restart_time - stop_time
-    exp + delta_now
+    floor(exp + delta_now)
   end
 end
