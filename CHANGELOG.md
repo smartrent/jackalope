@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.7.1
+
+* Fixes
+  * Added dialyzer flags :missing_return, :extra_return
+  * Minor fixes to remove new dialyzer warnings
+  * Updated CI to OTP 25
+
 ## v0.7.0
 
 * Updated
