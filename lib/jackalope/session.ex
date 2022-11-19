@@ -43,6 +43,13 @@ defmodule Jackalope.Session do
     GenServer.cast(__MODULE__, {:report_connection_status, status})
   end
 
+  @spec connection_status() :: :online | :offline
+  def connection_status() do
+    GenServer.call(__MODULE__, :connection_status)
+  catch
+    _, _ -> :offline
+  end
+
   ## MQTT-ing
   @doc false
   @spec publish(String.t(), any(), keyword) :: :ok | {:error, :invalid_qos | :invalid_ttl}
@@ -90,6 +97,11 @@ defmodule Jackalope.Session do
     }
 
     {:ok, initial_state, {:continue, :consume_work_list}}
+  end
+
+  @impl GenServer
+  def handle_call(:connection_status, _from, state) do
+    {:reply, state.connection_status, state}
   end
 
   @impl GenServer
