@@ -194,6 +194,12 @@ defmodule Jackalope do
              ]
   defdelegate publish(topic, payload, opts \\ []), to: Jackalope.Session
 
+  @doc """
+  Get the current MQTT connection status
+  """
+  @spec connection_status() :: :offline | :online
+  defdelegate connection_status(), to: Jackalope.Session
+
   # TODO Get rid of this stuff
   defp connection_options(opts) do
     server =
