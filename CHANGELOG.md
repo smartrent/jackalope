@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.7.2
+
+* Updates
+  * Support querying the session's connection status
+
 ## v0.7.1
 
 * Fixes
