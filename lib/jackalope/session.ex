@@ -134,7 +134,7 @@ defmodule Jackalope.Session do
         {:noreply, state}
 
       {:error, reason} ->
-        Logger.warn("Retrying message, failed with reason: #{inspect(reason)}")
+        Logger.warning("Retrying message, failed with reason: #{inspect(reason)}")
 
         state = %State{
           state
@@ -224,7 +224,10 @@ defmodule Jackalope.Session do
               {:noreply, state, {:continue, :consume_work_list}}
 
             {:error, reason} ->
-              Logger.warn("[Jackalope] Temporarily failed to execute #{inspect(cmd)}: #{reason}")
+              Logger.warning(
+                "[Jackalope] Temporarily failed to execute #{inspect(cmd)}: #{reason}"
+              )
+
               {:noreply, state}
           end
         end
