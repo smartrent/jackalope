@@ -79,7 +79,7 @@ defmodule Jackalope.TransientWorkList do
     if current_size <= work_list.max_size do
       items
     else
-      Logger.warn(
+      Logger.warning(
         "[Jackalope] The worklist exceeds #{work_list.max_size} (#{current_size}). Looking to shrink it."
       )
 
@@ -92,7 +92,7 @@ defmodule Jackalope.TransientWorkList do
       else
         {dropped, cropped_list} = List.pop_at(active_items, active_size - 1)
 
-        Logger.warn("[Jackalope] Dropped #{inspect(dropped)}  from oversized work list")
+        Logger.warning("[Jackalope] Dropped #{inspect(dropped)}  from oversized work list")
 
         cropped_list
       end

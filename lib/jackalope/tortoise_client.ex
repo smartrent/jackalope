@@ -105,7 +105,7 @@ defmodule Jackalope.TortoiseClient do
         {:noreply, state, {:continue, :subscribe_to_connection}}
 
       {:error, :timeout} ->
-        Logger.warn("[Jackalope] Timed out trying to create MQTT client. Trying again.")
+        Logger.warning("[Jackalope] Timed out trying to create MQTT client. Trying again.")
 
         {:noreply, state, {:continue, :spawn_connection}}
 
@@ -115,13 +115,13 @@ defmodule Jackalope.TortoiseClient do
         {:stop, {:connection_failure, reason}, state}
 
       :ignore ->
-        Logger.warn("[Jackalope] Starting Tortoise311 connection IGNORED!")
+        Logger.warning("[Jackalope] Starting Tortoise311 connection IGNORED!")
         {:noreply, state}
     end
   end
 
   def handle_continue(:spawn_connection, %State{connection: pid} = state) when is_pid(pid) do
-    Logger.warn("[Jackalope] Already connected to MQTT broker. No need to connect.")
+    Logger.warning("[Jackalope] Already connected to MQTT broker. No need to connect.")
     {:noreply, state}
   end
 
@@ -136,7 +136,7 @@ defmodule Jackalope.TortoiseClient do
         {:noreply, state}
 
       {:error, :timeout} ->
-        Logger.warn("[Jackalope] Timed out trying to subscribe to connection. Trying again.")
+        Logger.warning("[Jackalope] Timed out trying to subscribe to connection. Trying again.")
         {:noreply, state, {:continue, :subscribe_to_connection}}
 
       {:error, reason} when reason in [:timeout, :unknown_connection] ->

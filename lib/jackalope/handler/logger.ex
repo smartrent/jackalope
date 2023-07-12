@@ -27,7 +27,7 @@ defmodule Jackalope.Handler.Logger do
 
   @impl Jackalope.Handler
   def handle_error(reason) do
-    Logger.warn("Something bad happened: #{inspect(reason)}")
+    Logger.warning("Something bad happened: #{inspect(reason)}")
   end
 
   @impl Jackalope.Handler
