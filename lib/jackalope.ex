@@ -49,6 +49,11 @@ defmodule Jackalope do
     dynamic subscriptions or unsubscribing. This is the only mechanism
     for subscribing.
 
+  - `clean_session` (default: true), a flag bit that controls the
+    life cycle of the session state. The MQTT session lasts only
+    as long as the network connection between client and server.
+    When the session ends, all session state in the server is deleted.
+
   - `handler` (default: `Jackalope.Handler.Logger`) specifies the
     module implementing the callbacks (implementing
     `Jackalope.Handler` behaviour) to use. This module reacts to
@@ -118,6 +123,7 @@ defmodule Jackalope do
   @impl Supervisor
   def init(opts) do
     client_id = Keyword.get(opts, :client_id, "jackalope")
+    clean_session = Keyword.get(opts, :clean_session, true)
     jackalope_handler = Keyword.get(opts, :handler, Jackalope.Handler.Logger)
     max_work_list_size = Keyword.get(opts, :max_work_list_size, @default_max_work_list_size)
 
@@ -134,6 +140,7 @@ defmodule Jackalope do
        [
          handler: jackalope_handler,
          client_id: client_id,
+         clean_session: clean_session,
          connection_options: connection_options(opts),
          last_will: Keyword.get(opts, :last_will),
          work_list_mod: work_list_mod

@@ -15,6 +15,7 @@ defmodule Jackalope.TortoiseClient do
     defstruct connection: nil,
               handler: nil,
               client_id: nil,
+              clean_session: true,
               connection_options: [],
               publish_timeout: 30_000,
               last_will: nil,
@@ -93,6 +94,7 @@ defmodule Jackalope.TortoiseClient do
     conn_opts =
       state.connection_options
       |> Keyword.put(:client_id, state.client_id)
+      |> Keyword.put(:clean_session, state.clean_session)
       |> Keyword.put(:handler, tortoise_handler)
 
     case Tortoise311.Supervisor.start_child(ConnectionSupervisor, conn_opts) do
