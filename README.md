@@ -75,7 +75,7 @@ installed by adding `jackalope` to your list of dependencies in
 ```elixir
 def deps do
   [
-    {:jackalope, "~> 0.6.0"}
+    {:jackalope, "~> 0.7.2"}
   ]
 end
 ```
