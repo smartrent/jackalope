@@ -3,6 +3,14 @@
 ## v0.7.2
 
 * Updates
+  * Remove Logger warnings for Elixir 1.15
+
+* Fixes
+  * Add `:clean_session` option support. This fixes issues with QoS 1 sessions
+
+## v0.7.2
+
+* Updates
   * Support querying the session's connection status
 
 ## v0.7.1
