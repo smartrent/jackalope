@@ -38,7 +38,7 @@ defmodule Jackalope.TortoiseClient do
   end
 
   @doc "Publish a message"
-  @spec publish(String.t(), map(), opts :: Keyword.t() | non_neg_integer) ::
+  @spec publish(String.t(), String.t(), opts :: Keyword.t() | non_neg_integer) ::
           :ok | {:ok, reference()} | {:error, atom}
   def publish(topic, payload, opts \\ [])
 
