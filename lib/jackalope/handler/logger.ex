@@ -16,6 +16,11 @@ defmodule Jackalope.Handler.Logger do
   end
 
   @impl Jackalope.Handler
+  def connected(server, socket) do
+    Logger.info("Connected via #{inspect(server)} socket #{inspect(socket)}")
+  end
+
+  @impl Jackalope.Handler
   def subscription(status, topic_filter) do
     Logger.info("Subscription change: #{inspect(topic_filter)} is #{inspect(status)}")
   end

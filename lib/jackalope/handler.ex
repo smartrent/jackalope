@@ -14,6 +14,8 @@ defmodule Jackalope.Handler do
   @type topic_levels :: [String.t()]
   @type payload :: term()
   @type last_will :: [topic: topic, payload: payload, qos: non_neg_integer()]
+  @type socket :: any()
+  @type server :: atom()
 
   @doc """
   Called when the MQTT connection changes status
@@ -24,6 +26,14 @@ defmodule Jackalope.Handler do
   means that the connection has been dropped.
   """
   @callback connection(status :: :up | :down) :: any()
+
+  @doc """
+  Called when connected to an MQTT server
+
+  This can be used to inform other parts of the system about the type
+  of connection and the connected socket.
+  """
+  @callback connected(server :: server(), socket()) :: any()
 
   @doc """
   Produces the last will message for the current connection, or nil if the last will in the connection options is to be used
