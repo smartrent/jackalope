@@ -74,6 +74,43 @@ defmodule JackalopeTest do
     end
   end
 
+  describe "subscribe/1" do
+    test "subscribe to a single topic", context do
+      connect(context)
+
+      flush = expect_subscribe(context, [{"foo", 1}])
+
+      assert :ok = Jackalope.subscribe("foo")
+      assert received_subscribe = flush.()
+      assert %Package.Subscribe{topics: [{"foo", 1}]} = received_subscribe
+
+      script = [{:send, %Package.Suback{identifier: received_subscribe.identifier}}]
+      {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
+      assert_receive {MqttServer, :completed}, 500
+    end
+
+    test "subscribe to multiple topics", context do
+      connect(context)
+
+      flush = expect_subscribe(context, [{"baz", 1}, {"foo", 1}, {"bar", 1}])
+
+      assert :ok = Jackalope.subscribe(["baz", "foo", "bar"])
+      assert received_subscribe = flush.()
+      assert %Package.Subscribe{topics: [{"bar", 1}, {"baz", 1}, {"foo", 1}]} = received_subscribe
+
+      script = [
+        {:send,
+         %Package.Suback{
+           identifier: received_subscribe.identifier,
+           acks: [{:error, :access_denied}]
+         }}
+      ]
+
+      {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
+      assert_receive {MqttServer, :completed}, 500
+    end
+  end
+
   defp get_session_work_list() do
     :sys.get_state(Jackalope.Session).work_list
   end
@@ -202,7 +239,7 @@ defmodule JackalopeTest do
     transport = setup_server(context)
 
     handler = Keyword.get(opts, :handler, JackalopeTest.TestHandler)
-    initial_topics = Keyword.get(opts, :initial_topics)
+    initial_topics = Keyword.get(opts, :initial_topics, [])
     max_work_list_size = Keyword.get(opts, :max_work_list_size, 100)
 
     start_supervised!(
@@ -269,6 +306,31 @@ defmodule JackalopeTest do
       qos: qos,
       payload: payload
     })
+  end
+
+  defp expect_subscribe(context, topics, ack_all \\ true) do
+    # ensure topics are sorted
+    script = [
+      {:receive, %Package.Subscribe{topics: Enum.sort(topics)}}
+    ]
+
+    {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
+
+    fn ->
+      assert_receive {MqttServer, {:received, received_subscribe = %Package.Subscribe{}}}, 500
+      assert_receive {MqttServer, :completed}, 500
+
+      acks =
+        Enum.map(received_subscribe.topics, fn {_, qos} ->
+          if(ack_all, do: {:ok, qos}, else: {:error, :access_denied})
+        end)
+
+      script = [{:send, %Package.Suback{identifier: received_subscribe.identifier, acks: acks}}]
+      {:ok, _} = MqttServer.enact(context.mqtt_server_pid, script)
+      assert_receive {MqttServer, :completed}, 500
+
+      received_subscribe
+    end
   end
 
   defp pause_mqtt_server(context) do

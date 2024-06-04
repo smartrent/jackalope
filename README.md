@@ -37,14 +37,18 @@ Once `Jackalope` is running it is possible to publish messages to the broker;
 in addition to this there are some connection specific functionality is exposed,
 allowing us to ask for the connection status, and request a connection reconnect.
 
-Subscriptions are static only and are set as part of the connection options
-provided to Jackalope.
-
 - `Jackalope.publish(topic, payload)` will publish a message to the
   MQTT broker;
 
 - `Jackalope.reconnect()` will disconnect from the broker and
   reconnect; this is useful if the device changes network connection.
+
+Subscriptions can be set as part of the connection options provided to Jackalope
+or added later on.
+
+- `Jackalope.subscribe(topic)` subscribes to a topic
+
+- `Jackalope.unsubscribe(topic)` unsubscribes from a topic
 
 Please see the documentation for each of the functions for more
 information on usage; publish functions accept options such as setting quality of

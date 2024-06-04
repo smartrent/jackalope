@@ -71,6 +71,18 @@ defmodule Jackalope.Session do
     end
   end
 
+  @spec subscribe(String.t() | [String.t()]) :: :ok
+  def subscribe(topics) do
+    cmd = {:subscribe, List.wrap(topics)}
+    GenServer.cast(__MODULE__, {:cmd, cmd, [ttl: :timer.seconds(30)]})
+  end
+
+  @spec unsubscribe(String.t() | [String.t()]) :: :ok
+  def unsubscribe(topics) do
+    cmd = {:unsubscribe, List.wrap(topics)}
+    GenServer.cast(__MODULE__, {:cmd, cmd, [ttl: :timer.seconds(30)]})
+  end
+
   @doc false
   @spec reconnect() :: :ok
   def reconnect() do
@@ -134,14 +146,18 @@ defmodule Jackalope.Session do
         {:noreply, state}
 
       {:error, reason} ->
-        Logger.warning("Retrying message, failed with reason: #{inspect(reason)}")
+        if retry_error?(work_item, reason) do
+          Logger.warning("Retrying message, failed with reason: #{inspect(reason)}")
 
-        state = %State{
-          state
-          | work_list: WorkList.push(work_list, work_item)
-        }
+          state = %State{
+            state
+            | work_list: WorkList.push(work_list, work_item)
+          }
 
-        {:noreply, state}
+          {:noreply, state}
+        else
+          {:noreply, state}
+        end
     end
   end
 
@@ -240,5 +256,21 @@ defmodule Jackalope.Session do
     TortoiseClient.publish(topic, payload, opts)
   end
 
+  defp execute_work({:subscribe, topics}) do
+    TortoiseClient.subscribe(topics)
+  end
+
+  defp execute_work({:unsubscribe, topics}) do
+    TortoiseClient.unsubscribe(topics)
+  end
+
   defp expired?(expiration), do: Expiration.after?(Expiration.expiration(0), expiration)
+
+  defp retry_error?({{:subscribe, _}, _}, reason) do
+    # reason is a list of {status, {topic, qos}}
+    # if all the statuses are :ok or :access_denied, we don't want to retry
+    Enum.any?(reason, fn {status, _topic} -> status not in [:ok, :access_denied] end)
+  end
+
+  defp retry_error?(_, _), do: true
 end

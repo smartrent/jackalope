@@ -6,7 +6,7 @@ defmodule Jackalope.TortoiseClient do
 
   use GenServer
 
-  alias Jackalope.Session
+  alias Jackalope.{Session, Subscriptions}
   require Logger
 
   defmodule State do
@@ -54,6 +54,21 @@ defmodule Jackalope.TortoiseClient do
     publish(topic, payload, timeout: timeout)
   end
 
+  @spec subscribe([String.t()]) :: :ok
+  def subscribe(topics) do
+    GenServer.call(__MODULE__, {:subscribe, topics})
+  end
+
+  @spec unsubscribe([String.t()]) :: :ok
+  def unsubscribe(topics) do
+    GenServer.call(__MODULE__, {:unsubscribe, topics})
+  end
+
+  @spec subscriptions() :: {:ok, list()}
+  def subscriptions() do
+    GenServer.call(__MODULE__, :subscriptions)
+  end
+
   @doc "Do we have an MQTT connection?"
   @spec connected?() :: boolean
   def connected?() do
@@ -96,6 +111,7 @@ defmodule Jackalope.TortoiseClient do
       |> Keyword.put(:client_id, state.client_id)
       |> Keyword.put(:clean_session, state.clean_session)
       |> Keyword.put(:handler, tortoise_handler)
+      |> Keyword.put(:subscriptions, Subscriptions.topic_filters())
 
     case Tortoise311.Supervisor.start_child(ConnectionSupervisor, conn_opts) do
       {:ok, pid} ->
@@ -154,6 +170,29 @@ defmodule Jackalope.TortoiseClient do
 
   def handle_call({:publish, topic, payload, opts}, _from, %State{} = state) do
     {:reply, do_publish(state, topic, payload, opts), state}
+  end
+
+  def handle_call({:subscribe, topics}, _from, %State{} = state) do
+    Jackalope.Subscriptions.add(topics)
+
+    result =
+      Tortoise311.Connection.subscribe(state.client_id, Subscriptions.topic_filters(topics))
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:unsubscribe, topics}, _from, %State{} = state) do
+    Jackalope.Subscriptions.remove(topics)
+    result = Tortoise311.Connection.unsubscribe(state.client_id, topics)
+    {:reply, result, state}
+  end
+
+  def handle_call(:subscriptions, _from, %State{} = state) do
+    result =
+      Tortoise311.Connection.subscriptions(state.client_id)
+      |> Enum.map(&elem(&1, 0))
+
+    {:reply, result, state}
   end
 
   @impl GenServer

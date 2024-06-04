@@ -29,7 +29,7 @@ defmodule JackalopeTest.ScriptedMqttServer do
     GenServer.start_link(__MODULE__, opts)
   end
 
-  @spec enact(GenServer.server(), List.t()) :: {:ok, any()}
+  @spec enact(GenServer.server(), list()) :: {:ok, any()}
   def enact(pid, script) do
     GenServer.call(pid, {:enact, script})
   end
