@@ -37,7 +37,7 @@ defmodule Jackalope.MixProject do
     [
       {:tortoise311, "~> 0.11.0"},
       # {:tortoise311, git: "git@github.com:smartrent/tortoise311.git", branch: "main"},
-      {:dialyxir, "~> 1.3.0", only: [:test, :dev], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:test, :dev], runtime: false},
       {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.22", only: :docs, runtime: false}
     ]

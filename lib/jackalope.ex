@@ -44,10 +44,9 @@ defmodule Jackalope do
 
   - `initial_topics` (optional) specifies a list of topic_filters
     Jackalope should connect to when a connection has been
-    established. Notice that this list is also used should a reconnect
-    happen later in the life-cycle. Note that Jackalope does not support
-    dynamic subscriptions or unsubscribing. This is the only mechanism
-    for subscribing.
+    established. Note that if the `Jackalope` supervisor is restarted
+    for any reason, any changes to topic subscriptions made via
+    `subscribe/1` or `unsubscribe/1` will be lost.
 
   - `clean_session` (default: true), a flag bit that controls the
     life cycle of the session state. The MQTT session lasts only
@@ -126,10 +125,12 @@ defmodule Jackalope do
     clean_session = Keyword.get(opts, :clean_session, true)
     jackalope_handler = Keyword.get(opts, :handler, Jackalope.Handler.Logger)
     max_work_list_size = Keyword.get(opts, :max_work_list_size, @default_max_work_list_size)
+    initial_topics = Keyword.get(opts, :initial_topics, [])
 
     work_list_mod = Keyword.get(opts, :work_list_mod, @default_work_list_module)
 
     children = [
+      {Jackalope.Subscriptions, initial_topics},
       {Jackalope.Session,
        [
          handler: jackalope_handler,
@@ -164,6 +165,24 @@ defmodule Jackalope do
   """
   @spec reconnect() :: :ok
   defdelegate reconnect(), to: Jackalope.Session
+
+  @doc """
+  Subscribe to a topic or list of topics.
+  """
+  @spec subscribe(String.t() | [String.t()]) :: :ok
+  defdelegate subscribe(topics), to: Jackalope.Session
+
+  @doc """
+  Unsubscribe from a topic or list of topics.
+  """
+  @spec unsubscribe(String.t() | [String.t()]) :: :ok
+  defdelegate unsubscribe(topics), to: Jackalope.Session
+
+  @doc """
+  Returns a list of topics the client is currently subscribed to.
+  """
+  @spec subscriptions() :: {:ok, [binary()]}
+  defdelegate subscriptions(), to: Jackalope.TortoiseClient
 
   @doc """
   Publish a message to the MQTT broker
@@ -216,16 +235,10 @@ defmodule Jackalope do
     # Default backoff options is 1 sec to 30 secs, doubling each time.
     backoff_opts = Keyword.get(opts, :backoff) || [min_interval: 1_000, max_interval: 30_000]
     Logger.info("[Jackalope] Connecting with backoff options #{inspect(backoff_opts)}")
-    initial_topics = Keyword.get(opts, :initial_topics)
-
-    subscriptions =
-      for topic_filter <- List.wrap(initial_topics),
-          do: {topic_filter, 1}
 
     [
       server: server,
-      backoff: backoff_opts,
-      subscriptions: subscriptions
+      backoff: backoff_opts
     ]
     |> maybe_add_user_name_password(opts)
   end
