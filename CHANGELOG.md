@@ -1,6 +1,11 @@
 # Changelog
 
-## v0.7.2
+## v0.8.0
+
+* Updates
+  * Support for subscribing after connecting to the MQTT server
+
+## v0.7.3
 
 * Updates
   * Remove Logger warnings for Elixir 1.15
