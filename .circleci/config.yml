@@ -17,9 +17,9 @@ defaults: &defaults
   working_directory: ~/repo
 
 jobs:
-  build_elixir_1_15_otp_26:
+  build_elixir_1_17_otp_27:
     docker:
-      - image: hexpm/elixir:1.15.2-erlang-26.0.2-alpine-3.18.2
+      - image: hexpm/elixir:1.17.2-erlang-27.0.1-alpine-3.20.1
     <<: *defaults
     steps:
       - <<: *install_system_deps
@@ -42,6 +42,18 @@ jobs:
           paths:
             - _build
             - deps
+
+  build_elixir_1_15_otp_26:
+    docker:
+      - image: hexpm/elixir:1.15.2-erlang-26.0.2-alpine-3.18.2
+    <<: *defaults
+    steps:
+      - <<: *install_system_deps
+      - checkout
+      - <<: *install_hex_rebar
+      - run: mix deps.get
+      - run: mix compile
+      - run: mix test
 
   build_elixir_1_14_otp_25:
     docker:
@@ -79,6 +91,7 @@ jobs:
 workflows:
   build_test:
     jobs:
+      - build_elixir_1_17_otp_27
       - build_elixir_1_15_otp_26
       - build_elixir_1_14_otp_25
       - build_elixir_1_13_otp_25
