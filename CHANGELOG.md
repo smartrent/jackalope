@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.1
+
+* Updates
+  * Upgraded to Tortoise311 v0.12.0
+
 ## v0.8.0
 
 * Updates
