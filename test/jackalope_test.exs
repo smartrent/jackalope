@@ -28,7 +28,7 @@ defmodule JackalopeTest do
                  work_list_mod: @work_list_mod
                )
 
-      assert_receive {MqttServer, {:received, %Package.Connect{}}}
+      assert_receive {MqttServer, {:received, %Package.Connect{}}}, 2_000
 
       assert is_pid(pid)
       assert Process.alive?(pid)
@@ -254,7 +254,7 @@ defmodule JackalopeTest do
        ]}
     )
 
-    assert_receive {MqttServer, {:received, %Package.Connect{client_id: ^client_id}}}
+    assert_receive {MqttServer, {:received, %Package.Connect{client_id: ^client_id}}}, 3_000
     assert_receive {MqttServer, :completed}
 
     work_list = get_session_work_list()
