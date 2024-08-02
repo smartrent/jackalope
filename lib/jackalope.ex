@@ -110,9 +110,15 @@ defmodule Jackalope do
         service the last will message should get published with; note
         that QoS=2 is not supported by AWS IoT.
 
+  - `first_connect_delay` (default: 1_000) specifies a 50% jittered delay in msecs
+     before connecting for the first time to the MQTT server.
+     This can help spread out connections after an outage.
+
   - `backoff` (default: [min_interval: 1_000, max_interval: 30_000])
      gives the bounds of an exponential backoff algorithm used when retrying
-     from failed connections.
+     to reconnect from failed connections, or when retrying to subscribe should
+     connecting succeed but subsciptions fail (it can happen when an MQTT Server
+     throttles subscriptions but not connections).
   """
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts) do
@@ -234,11 +240,16 @@ defmodule Jackalope do
 
     # Default backoff options is 1 sec to 30 secs, doubling each time.
     backoff_opts = Keyword.get(opts, :backoff) || [min_interval: 1_000, max_interval: 30_000]
-    Logger.info("[Jackalope] Connecting with backoff options #{inspect(backoff_opts)}")
+    first_connect_delay = Keyword.get(opts, :first_connect_delay, 1_000)
+
+    Logger.info(
+      "[Jackalope] Connecting with backoff options #{inspect(backoff_opts)} and first connect delay #{first_connect_delay}"
+    )
 
     [
       server: server,
-      backoff: backoff_opts
+      backoff: backoff_opts,
+      first_connect_delay: first_connect_delay
     ]
     |> maybe_add_user_name_password(opts)
   end

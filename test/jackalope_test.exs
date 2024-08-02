@@ -25,10 +25,11 @@ defmodule JackalopeTest do
                  server: transport,
                  client_id: context.client_id,
                  handler: JackalopeTest.TestHandler,
-                 work_list_mod: @work_list_mod
+                 work_list_mod: @work_list_mod,
+                 first_connect_delay: 0
                )
 
-      assert_receive {MqttServer, {:received, %Package.Connect{}}}, 2_000
+      assert_receive {MqttServer, {:received, %Package.Connect{}}}
 
       assert is_pid(pid)
       assert Process.alive?(pid)
@@ -250,11 +251,12 @@ defmodule JackalopeTest do
          handler: handler,
          initial_topics: initial_topics,
          max_work_list_size: max_work_list_size,
-         work_list_mod: @work_list_mod
+         work_list_mod: @work_list_mod,
+         first_connect_delay: 0
        ]}
     )
 
-    assert_receive {MqttServer, {:received, %Package.Connect{client_id: ^client_id}}}, 3_000
+    assert_receive {MqttServer, {:received, %Package.Connect{client_id: ^client_id}}}
     assert_receive {MqttServer, :completed}
 
     work_list = get_session_work_list()
