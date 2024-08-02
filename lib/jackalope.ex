@@ -238,7 +238,11 @@ defmodule Jackalope do
       Keyword.get(opts, :server, @default_mqtt_server)
       |> do_configure_server()
 
-    Keyword.take(opts, [:first_connect_delay, :backoff])
+    backoff_opts = Keyword.get(opts, :backoff) || [min_interval: 1_000, max_interval: 30_000]
+    Logger.info("[Jackalope] Connecting with backoff options #{inspect(backoff_opts)}")
+
+    Keyword.take(opts, [:first_connect_delay])
+    |> Keyword.put(:backoff, backoff_opts)
     |> Keyword.put(:server, server)
     |> maybe_add_user_name_password(opts)
   end
