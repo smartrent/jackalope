@@ -240,17 +240,20 @@ defmodule Jackalope do
 
     # Default backoff options is 1 sec to 30 secs, doubling each time.
     backoff_opts = Keyword.get(opts, :backoff) || [min_interval: 1_000, max_interval: 30_000]
-    first_connect_delay = Keyword.get(opts, :first_connect_delay, 1_000)
 
-    Logger.info(
-      "[Jackalope] Connecting with backoff options #{inspect(backoff_opts)} and first connect delay #{first_connect_delay}"
-    )
+    Logger.info("[Jackalope] Connecting with backoff options #{inspect(backoff_opts)}")
 
-    [
+    connect_options = [
       server: server,
-      backoff: backoff_opts,
-      first_connect_delay: first_connect_delay
+      backoff: backoff_opts
     ]
+
+    first_connect_delay = Keyword.get(opts, :first_connect_delay)
+
+    if(first_connect_delay,
+      do: Keyword.put(connect_options, :first_connect_delay, first_connect_delay),
+      else: connect_options
+    )
     |> maybe_add_user_name_password(opts)
   end
 
