@@ -110,8 +110,8 @@ defmodule Jackalope do
         service the last will message should get published with; note
         that QoS=2 is not supported by AWS IoT.
 
-  - `first_connect_delay` (default: 1_000) specifies a 50% jittered delay in msecs
-     before connecting for the first time to the MQTT server.
+  - `first_connect_delay` (optional) and passed to Tortoise311 if provided.
+     It specifies a delay in msecs before Tortoise311 connects for the first time to the MQTT server.
      This can help spread out connections after an outage.
 
   - `backoff` (default: [min_interval: 1_000, max_interval: 30_000])
@@ -238,22 +238,8 @@ defmodule Jackalope do
       Keyword.get(opts, :server, @default_mqtt_server)
       |> do_configure_server()
 
-    # Default backoff options is 1 sec to 30 secs, doubling each time.
-    backoff_opts = Keyword.get(opts, :backoff) || [min_interval: 1_000, max_interval: 30_000]
-
-    Logger.info("[Jackalope] Connecting with backoff options #{inspect(backoff_opts)}")
-
-    connect_options = [
-      server: server,
-      backoff: backoff_opts
-    ]
-
-    first_connect_delay = Keyword.get(opts, :first_connect_delay)
-
-    if(first_connect_delay,
-      do: Keyword.put(connect_options, :first_connect_delay, first_connect_delay),
-      else: connect_options
-    )
+    Keyword.take(opts, [:first_connect_delay, :backoff])
+    |> Keyword.put(:server, server)
     |> maybe_add_user_name_password(opts)
   end
 
