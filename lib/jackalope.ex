@@ -110,9 +110,15 @@ defmodule Jackalope do
         service the last will message should get published with; note
         that QoS=2 is not supported by AWS IoT.
 
-  - `backoff` (default: [min_interval: 1_000, max_interval: 30_000])
-     gives the bounds of an exponential backoff algorithm used when retrying
-     from failed connections.
+  - `first_connect_delay` (optional) and passed to Tortoise311 if provided, else Tortoise311 uses its own default.
+     It specifies a delay in msecs before Tortoise311 connects for the first time to the MQTT server.
+     This can help spread out connections after an outage.
+
+  - `backoff` (optional) and passed to Tortoise311 if provided, else Tortoise311 uses its own default.
+     It gives the bounds of an exponential backoff algorithm used
+     when Tortoise311 retries to reconnect from failed connections, or when it retries
+     to subscribe should connecting succeed but subsciptions fail (it can happen when an MQTT Server
+     throttles subscriptions but not connections).
   """
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts) do
@@ -232,14 +238,8 @@ defmodule Jackalope do
       Keyword.get(opts, :server, @default_mqtt_server)
       |> do_configure_server()
 
-    # Default backoff options is 1 sec to 30 secs, doubling each time.
-    backoff_opts = Keyword.get(opts, :backoff) || [min_interval: 1_000, max_interval: 30_000]
-    Logger.info("[Jackalope] Connecting with backoff options #{inspect(backoff_opts)}")
-
-    [
-      server: server,
-      backoff: backoff_opts
-    ]
+    Keyword.take(opts, [:first_connect_delay, :backoff])
+    |> Keyword.put(:server, server)
     |> maybe_add_user_name_password(opts)
   end
 
