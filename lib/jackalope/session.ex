@@ -222,6 +222,8 @@ defmodule Jackalope.Session do
             state.handler.handle_error(reason)
           end
 
+          state = %{state | work_list: WorkList.pop(work_list)}
+
           {:noreply, state, {:continue, :consume_work_list}}
         else
           case execute_work(cmd) do
