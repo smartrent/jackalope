@@ -37,7 +37,7 @@ defmodule Jackalope.MixProject do
     [
       {:dialyxir, "~> 1.4", only: [:test, :dev], runtime: false},
       # {:tortoise311, "~> 0.12"},
-      {:tortoise311, git: "git@github.com:smartrent/tortoise311.git", branch: "connection_monitor"},
+      {:tortoise311, git: "git@github.com:smartrent/tortoise311.git", branch: "test_all"},
       {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.22", only: :docs, runtime: false}
     ]
