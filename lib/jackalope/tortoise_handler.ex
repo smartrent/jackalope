@@ -41,6 +41,21 @@ defmodule Jackalope.TortoiseHandler do
   end
 
   @impl Tortoise311.Handler
+  def connected(transport_module, socket, %State{} = state) do
+    if function_exported?(state.handler, :connected, 2) do
+      server =
+        case transport_module do
+          Tortoise311.Transport.SSL -> :ssl
+          Tortoise311.Transport.Tcp -> :tcp
+        end
+
+      _ignored = state.handler.connected(server, socket)
+    end
+
+    {:ok, state}
+  end
+
+  @impl Tortoise311.Handler
   def subscription(status, topic_filter, %State{} = state) when status in [:up, :down] do
     if function_exported?(state.handler, :subscription, 2) do
       _ignored = state.handler.subscription(status, topic_filter)

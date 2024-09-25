@@ -151,6 +151,7 @@ defmodule Jackalope.TortoiseClient do
     case Tortoise311.Connection.connection(state.client_id, active: true) do
       {:ok, _connection} ->
         {:ok, _} = Tortoise311.Events.register(state.client_id, :status)
+        {:ok, _} = Tortoise311.Events.register(state.client_id, :connection)
         {:noreply, state}
 
       {:error, :timeout} ->
