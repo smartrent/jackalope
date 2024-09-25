@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.9.0
+
+* Updates
+  * Make :first_connect_delay and :backoff optional Jackalope options (#104)
+
+* Fixes
+  * Pop expired items from the work list to avoid an infinite loop (#105)
+  * Fix session retry error analysis to account for timeout errors (#106)
+  * Bump dependencies and CI versions (#107)
+
 ## v0.8.1
 
 * Updates
