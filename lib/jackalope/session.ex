@@ -268,11 +268,12 @@ defmodule Jackalope.Session do
 
   defp expired?(expiration), do: Expiration.after?(Expiration.expiration(0), expiration)
 
-  defp retry_error?({{:subscribe, _}, _}, reason) do
-    # reason is a list of {status, {topic, qos}}
-    # if all the statuses are :ok or :access_denied, we don't want to retry
-    Enum.any?(reason, fn {status, _topic} -> status not in [:ok, :access_denied] end)
+  # When reasons is a list of {status, {topic, qos}},
+  # if all the statuses are :ok or :access_denied, we don't want to retry
+  defp retry_error?({{:subscribe, _}, _}, reasons) when is_list(reasons) do
+    Enum.any?(reasons, fn {status, _topic} -> status not in [:ok, :access_denied] end)
   end
 
+  # Else, we want to retry
   defp retry_error?(_, _), do: true
 end
