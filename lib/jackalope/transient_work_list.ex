@@ -24,7 +24,7 @@ defmodule Jackalope.TransientWorkList do
 
   @doc false
   @spec prepend(t(), list()) :: t()
-  def prepend(work_list, items) when is_list(items) do
+  def prepend(%__MODULE__{} = work_list, items) when is_list(items) do
     updated_items =
       (items ++ work_list.items)
       |> bound_work_items(work_list)

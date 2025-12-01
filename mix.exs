@@ -15,13 +15,12 @@ defmodule Jackalope.MixProject do
       dialyzer: dialyzer(),
       docs: docs(),
       package: package(),
-      elixirc_paths: elixirc_paths(Mix.env()),
-      preferred_cli_env: %{
-        docs: :docs,
-        "hex.publish": :docs,
-        "hex.build": :docs
-      }
+      elixirc_paths: elixirc_paths(Mix.env())
     ]
+  end
+
+  def cli do
+    [preferred_envs: %{docs: :docs, "hex.publish": :docs, "hex.build": :docs}]
   end
 
   # Run "mix help compile.app" to learn about applications.
