@@ -118,12 +118,12 @@ defmodule Jackalope.Session do
 
   @impl GenServer
   # Connection status changes
-  def handle_cast({:report_connection_status, :up}, state) do
+  def handle_cast({:report_connection_status, :up}, %State{} = state) do
     state = %State{state | connection_status: :online}
     {:noreply, state, {:continue, :consume_work_list}}
   end
 
-  def handle_cast({:report_connection_status, status}, state)
+  def handle_cast({:report_connection_status, status}, %State{} = state)
       when status in [:down, :terminating, :terminated] do
     state = %State{state | connection_status: :offline}
     {:noreply, state}
@@ -180,7 +180,7 @@ defmodule Jackalope.Session do
     {:noreply, state, {:continue, :consume_work_list}}
   end
 
-  def handle_cast(:reconnect, state) do
+  def handle_cast(:reconnect, %State{} = state) do
     :ok = Jackalope.TortoiseClient.reconnect()
 
     state = %State{

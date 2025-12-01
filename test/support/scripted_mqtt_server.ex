@@ -68,7 +68,7 @@ defmodule JackalopeTest.ScriptedMqttServer do
     next_action(%State{state | script: state.script ++ script})
   end
 
-  def handle_call({:enact, script}, {pid, _} = caller, state) do
+  def handle_call({:enact, script}, {pid, _} = caller, %State{} = state) do
     GenServer.reply(caller, {:ok, state.server_info})
     {:ok, client} = state.transport.accept(state.server_socket, 3_000)
     :ok = state.transport.accept_ack(client, 200)
