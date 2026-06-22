@@ -7,8 +7,6 @@ defmodule Jackalope.Supervisor do
 
   alias Jackalope.TortoiseClient
 
-  require Logger
-
   @type init_arg ::
           {:app_handler, module()} | {:client_id, atom()} | {:connection_options, Keyword.t()}
 

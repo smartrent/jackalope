@@ -6,8 +6,6 @@ defmodule Jackalope do
 
   use Supervisor
 
-  require Logger
-
   @default_mqtt_server {
     Tortoise311.Transport.Tcp,
     host: "localhost", port: 1883
