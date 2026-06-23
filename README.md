@@ -23,6 +23,21 @@ Besides this Jackalope aims to provide helpers for local testing,
 allowing you to test your application without having a connection to
 AWS; Jackalope should take care of that.
 
+## Development Setup
+
+Install [mise](https://mise.jdx.dev) (requires >= 2026.4.8):
+
+```sh
+brew install mise
+echo 'eval "$(mise activate zsh)"' >> ~/.zshrc
+```
+
+Then install project tools:
+
+```sh
+mise trust mise.toml && mise install
+```
+
 ## Usage
 
 The `Jackalope` module implements a `start_link/1` function; use this
