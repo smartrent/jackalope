@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: ${{ matrix.tag }}
+    runs-on: ubuntu-latest
+    container:
+      image: hexpm/elixir:${{ matrix.tag }}
+    env:
+      LC_ALL: C.UTF-8
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tag: 1.19.0-erlang-28.1-alpine-3.22.2
+            latest: true
+          - tag: 1.18.2-erlang-27.3.4-alpine-3.22.2
+            latest: false
+          - tag: 1.17.3-erlang-27.1-alpine-3.20.3
+            latest: false
+          - tag: 1.16.3-erlang-26.2.5-alpine-3.19.1
+            latest: false
+          - tag: 1.15.7-erlang-26.2.4-alpine-3.18.6
+            latest: false
+          - tag: 1.14.5-erlang-25.3.2.11-alpine-3.17.7
+            latest: false
+          - tag: 1.13.4-erlang-24.3.4.17-alpine-3.16.9
+            latest: false
+    steps:
+      - name: Install git and build tools
+        run: apk add --no-cache git build-base
+
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install hex and rebar
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            _build
+            deps
+          key: v1-mix-cache-${{ matrix.tag }}-${{ hashFiles('mix.lock') }}
+
+      - run: mix deps.get
+      - run: mix compile --warnings-as-errors
+      - run: |
+          # shellcheck disable=SC2209
+          MIX_ENV=test mix compile --warnings-as-errors
+      - run: mix test || mix test
+
+      - name: Format check
+        if: matrix.latest
+        run: mix format --check-formatted
+
+      - name: Unused deps check
+        if: matrix.latest
+        run: mix deps.unlock --check-unused
+
+      - name: Build docs
+        if: matrix.latest
+        run: mix docs
+
+      - name: Hex build
+        if: matrix.latest
+        run: mix hex.build
+
+      - name: Credo
+        if: matrix.latest
+        run: mix credo -a --strict --ignore-checks "refactor"
+
+      - name: Dialyzer
+        if: matrix.latest
+        run: mix dialyzer
