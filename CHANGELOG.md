@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.1
+
+* Fixes
+  * Fix compiler warnings from elixir 1.19 (#112)
+
+* Updates
+  * [TECH-7735] Migrate CI from CircleCI to GitHub Actions (#114)
+  * [TECH-8851] Migrate from asdf to mise (#)113
+
 ## v0.9.0
 
 * Updates
