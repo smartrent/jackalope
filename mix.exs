@@ -15,7 +15,11 @@ defmodule Jackalope.MixProject do
       dialyzer: dialyzer(),
       docs: docs(),
       package: package(),
-      elixirc_paths: elixirc_paths(Mix.env())
+      elixirc_paths: elixirc_paths(Mix.env()),
+      test_coverage: [
+        ignore_modules: [~r/^JackalopeTest/],
+        summary: [threshold: 0]
+      ]
     ]
   end
 
