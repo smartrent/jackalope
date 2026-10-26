@@ -2,7 +2,7 @@ defmodule Jackalope.TortoiseClient do
   @moduledoc false
 
   # The Tortoise311 client talks to Tortoise311 configured to use Amazon Web
-  # Service (AWS) IoT broker over a TLS connection.
+  # Services (AWS) IoT broker over a TLS connection.
 
   use GenServer
 
@@ -218,7 +218,7 @@ defmodule Jackalope.TortoiseClient do
   end
 
   # Send the result to the Jackalope process; the Jackalope process
-  # will keep track of the references, and it knowns about the type of
+  # will keep track of the references, and it knows about the type of
   # message--publish, subscribe, or unsubscribe--that the reference
   # relates to.
   def handle_info(

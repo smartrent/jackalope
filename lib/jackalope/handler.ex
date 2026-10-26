@@ -27,7 +27,7 @@ defmodule Jackalope.Handler do
 
   @doc """
   Produces the last will message for the current connection, or nil if the last will in the connection options is to be used
-  Example: [topic: hub_serial_number/message", payload: %{code: "going_down", msg: "Last will message"}, qos: 1]
+  Example: [topic: "hub_serial_number/message", payload: %{code: "going_down", msg: "Last will message"}, qos: 1]
   """
   @callback last_will() :: last_will | nil
 
@@ -57,7 +57,7 @@ defmodule Jackalope.Handler do
   Handle errors produced by Jackalope that should be reacted to
 
   During the connection life-cycle various errors can occur, and while
-  Jackrabbit and Tortoise311 will try to correct the situation, some
+  Jackalope and Tortoise311 will try to correct the situation, some
   errors require user intervention. The optional `handle_error/1`
   callback can help inform the surrounding system of errors.
 
